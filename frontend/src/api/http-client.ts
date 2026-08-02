@@ -1,5 +1,9 @@
 import { appConfig } from "@/app/config";
-import { readStoredAuthSession } from "@/features/auth/auth-storage";
+import {
+  clearStoredAuthSession,
+  readStoredAuthSession,
+  writeStoredAuthSession,
+} from "@/features/auth/auth-storage";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -21,7 +25,10 @@ type RequestOptions = {
   headers?: HeadersInit;
   signal?: AbortSignal;
   businessId?: string | null;
+  skipAuthRefresh?: boolean;
 };
+
+let refreshPromise: Promise<boolean> | null = null;
 
 async function parseResponse(response: Response) {
   const contentType = response.headers.get("content-type") ?? "";
@@ -58,9 +65,75 @@ function extractErrorMessage(payload: unknown): string {
   return "Request failed";
 }
 
+async function tryRefreshSession(): Promise<boolean> {
+  const session = readStoredAuthSession();
+  if (!session?.refreshToken) {
+    return false;
+  }
+
+  try {
+    const response = await fetch(`${appConfig.apiBaseUrl}/auth/refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ refreshToken: session.refreshToken }),
+    });
+
+    const payload = await parseResponse(response);
+    if (!response.ok) {
+      clearStoredAuthSession();
+      return false;
+    }
+
+    const authPayload = payload as {
+      accessToken: string;
+      tokenType: string;
+      expiresAt: string;
+      refreshToken?: string | null;
+      refreshExpiresAt?: string | null;
+      user: typeof session.user;
+    };
+
+    writeStoredAuthSession({
+      accessToken: authPayload.accessToken,
+      tokenType: authPayload.tokenType,
+      expiresAt: authPayload.expiresAt,
+      refreshToken: authPayload.refreshToken ?? null,
+      refreshExpiresAt: authPayload.refreshExpiresAt ?? null,
+      user: {
+        ...authPayload.user,
+        emailVerified: Boolean(authPayload.user.emailVerified),
+      },
+    });
+
+    return true;
+  } catch {
+    clearStoredAuthSession();
+    return false;
+  }
+}
+
+async function refreshSessionOnce() {
+  if (!refreshPromise) {
+    refreshPromise = tryRefreshSession().finally(() => {
+      refreshPromise = null;
+    });
+  }
+
+  return refreshPromise;
+}
+
 export async function httpClient<T>(
   path: string,
-  { method = "GET", body, headers, signal, businessId }: RequestOptions = {},
+  {
+    method = "GET",
+    body,
+    headers,
+    signal,
+    businessId,
+    skipAuthRefresh = false,
+  }: RequestOptions = {},
 ): Promise<T> {
   const authSession = readStoredAuthSession();
 
@@ -75,6 +148,20 @@ export async function httpClient<T>(
     },
     body: body ? JSON.stringify(body) : undefined,
   });
+
+  if (response.status === 401 && !skipAuthRefresh && path !== "/auth/refresh") {
+    const refreshed = await refreshSessionOnce();
+    if (refreshed) {
+      return httpClient<T>(path, {
+        method,
+        body,
+        headers,
+        signal,
+        businessId,
+        skipAuthRefresh: true,
+      });
+    }
+  }
 
   const payload = await parseResponse(response);
 

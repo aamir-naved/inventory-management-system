@@ -35,6 +35,14 @@ public interface SaleReturnRepository extends JpaRepository<SaleReturn, UUID> {
     BigDecimal sumReturnedAmountForSale(UUID businessId, UUID saleId);
 
     @Query("""
+        select r.sale.id, coalesce(sum(r.totalAmount), 0)
+        from SaleReturn r
+        where r.businessId = :businessId
+        group by r.sale.id
+        """)
+    List<Object[]> sumReturnedAmountsGroupedBySale(UUID businessId);
+
+    @Query("""
         select r from SaleReturn r
         join r.sale s
         join s.customer c

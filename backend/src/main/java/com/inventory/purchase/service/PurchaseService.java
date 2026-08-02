@@ -16,6 +16,8 @@ import com.inventory.purchase.dto.PurchaseUpdateRequest;
 import com.inventory.purchase.entity.Purchase;
 import com.inventory.purchase.entity.PurchaseItem;
 import com.inventory.purchase.repository.PurchaseRepository;
+import com.inventory.purchase.repository.PurchaseReturnRepository;
+import com.inventory.settings.service.SettingsService;
 import com.inventory.supplier.entity.Supplier;
 import com.inventory.supplier.repository.SupplierRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -33,23 +35,29 @@ import java.util.UUID;
 public class PurchaseService {
 
     private final PurchaseRepository purchaseRepository;
+    private final PurchaseReturnRepository purchaseReturnRepository;
     private final SupplierRepository supplierRepository;
     private final ProductRepository productRepository;
     private final InventoryMovementRepository inventoryMovementRepository;
     private final PaymentService paymentService;
+    private final SettingsService settingsService;
 
     public PurchaseService(
         PurchaseRepository purchaseRepository,
+        PurchaseReturnRepository purchaseReturnRepository,
         SupplierRepository supplierRepository,
         ProductRepository productRepository,
         InventoryMovementRepository inventoryMovementRepository,
-        PaymentService paymentService
+        PaymentService paymentService,
+        SettingsService settingsService
     ) {
         this.purchaseRepository = purchaseRepository;
+        this.purchaseReturnRepository = purchaseReturnRepository;
         this.supplierRepository = supplierRepository;
         this.productRepository = productRepository;
         this.inventoryMovementRepository = inventoryMovementRepository;
         this.paymentService = paymentService;
+        this.settingsService = settingsService;
     }
 
     public PurchaseResponse create(PurchaseRequest request) {
@@ -136,6 +144,17 @@ public class PurchaseService {
     }
 
     @Transactional(readOnly = true)
+    public List<PurchaseResponse> listBySupplier(UUID supplierId) {
+        UUID businessId = requireBusinessId();
+        supplierRepository.findByIdAndBusinessId(supplierId, businessId)
+            .orElseThrow(() -> new EntityNotFoundException("Supplier not found"));
+        return purchaseRepository.findByBusinessIdAndSupplierIdOrderByPurchaseDateDescCreatedAtDesc(businessId, supplierId)
+            .stream()
+            .map(this::toResponse)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
     public PurchaseResponse getById(UUID id) {
         return toResponse(findPurchase(id));
     }
@@ -165,12 +184,16 @@ public class PurchaseService {
             throw new IllegalArgumentException("Purchase is already cancelled");
         }
 
+        if (purchaseReturnRepository.existsByBusinessIdAndPurchase_Id(purchase.getBusinessId(), purchase.getId())) {
+            throw new IllegalArgumentException("Purchases with returns cannot be cancelled");
+        }
+
         for (PurchaseItem item : purchase.getItems()) {
             Product product = item.getProduct();
             BigDecimal before = product.getCurrentStock();
             BigDecimal after = before.subtract(item.getQuantity());
 
-            if (after.compareTo(BigDecimal.ZERO) < 0) {
+            if (after.compareTo(BigDecimal.ZERO) < 0 && !settingsService.isNegativeStockAllowed()) {
                 throw new IllegalArgumentException(
                     "Purchase cannot be cancelled because stock has already been consumed for " + product.getName()
                 );
@@ -262,8 +285,12 @@ public class PurchaseService {
     }
 
     private PurchaseResponse toResponse(Purchase purchase) {
+        UUID businessId = purchase.getBusinessId();
+        BigDecimal returnedAmount = purchaseReturnRepository.sumReturnedAmountForPurchase(businessId, purchase.getId());
+        boolean hasReturns = returnedAmount.compareTo(BigDecimal.ZERO) > 0;
+        BigDecimal netAmount = purchase.getTotalAmount().subtract(returnedAmount);
         BigDecimal amountPaid = purchase.getAmountPaid() == null ? BigDecimal.ZERO : purchase.getAmountPaid();
-        BigDecimal outstandingAmount = PaymentAmounts.outstanding(amountPaid, purchase.getTotalAmount());
+        BigDecimal outstandingAmount = PaymentAmounts.outstanding(amountPaid, netAmount);
 
         return new PurchaseResponse(
             purchase.getId(),
@@ -275,19 +302,31 @@ public class PurchaseService {
             purchase.getPaymentStatus(),
             purchase.getNotes(),
             purchase.getTotalAmount(),
+            returnedAmount,
+            netAmount,
             amountPaid,
             outstandingAmount,
             purchase.isCancelled(),
             purchase.getCancellationReason(),
+            hasReturns,
             purchase.getItems().stream()
-                .map(item -> new PurchaseItemResponse(
-                    item.getProduct().getId(),
-                    item.getProduct().getName(),
-                    item.getProduct().getUnit(),
-                    item.getQuantity(),
-                    item.getUnitCost(),
-                    item.getLineTotal()
-                ))
+                .map(item -> {
+                    BigDecimal returnedQuantity = purchaseReturnRepository.sumReturnedQuantityForPurchaseItem(
+                        businessId,
+                        item.getId()
+                    );
+                    return new PurchaseItemResponse(
+                        item.getId(),
+                        item.getProduct().getId(),
+                        item.getProduct().getName(),
+                        item.getProduct().getUnit(),
+                        item.getQuantity(),
+                        item.getUnitCost(),
+                        item.getLineTotal(),
+                        returnedQuantity,
+                        item.getQuantity().subtract(returnedQuantity)
+                    );
+                })
                 .toList(),
             purchase.getCreatedAt(),
             purchase.getUpdatedAt()

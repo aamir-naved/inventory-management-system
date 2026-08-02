@@ -40,15 +40,15 @@ Priority: P0
 
 ### Features
 
-* [ ] User Registration
-* [ ] Email Verification
-* [ ] Login
-* [ ] Logout
-* [ ] Forgot Password
-* [ ] Reset Password
-* [ ] JWT Authentication
-* [ ] Refresh Token
-* [ ] User Profile
+* [x] User Registration
+* [x] Email Verification
+* [x] Login
+* [x] Logout
+* [x] Forgot Password
+* [x] Reset Password
+* [x] JWT Authentication
+* [x] Refresh Token
+* [x] User Profile
 
 ---
 
@@ -60,8 +60,8 @@ Priority: P0
 
 * [ ] Create Business
 * [ ] Update Business
-* [ ] Business Settings
-* [ ] Currency
+* [x] Business Settings
+* [x] Currency
 * [ ] Time Zone
 * [ ] Business Logo
 
@@ -107,11 +107,11 @@ Priority: P0
 
 ### Features
 
-* [ ] Create Supplier
-* [ ] Update Supplier
-* [ ] Archive Supplier
-* [ ] Supplier Search
-* [ ] Supplier Purchase History
+* [x] Create Supplier
+* [x] Update Supplier
+* [x] Archive Supplier
+* [x] Supplier Search
+* [x] Supplier Purchase History
 
 ---
 
@@ -121,12 +121,12 @@ Priority: P0
 
 ### Features
 
-* [ ] Create Customer
-* [ ] Update Customer
-* [ ] Archive Customer
-* [ ] Customer Search
-* [ ] Outstanding Balance
-* [ ] Purchase History
+* [x] Create Customer
+* [x] Update Customer
+* [x] Archive Customer
+* [x] Customer Search
+* [x] Outstanding Balance
+* [x] Purchase History
 
 ---
 
@@ -196,14 +196,14 @@ Priority: P0
 
 ### Features
 
-* [ ] Today's Sales
-* [ ] Today's Purchases
-* [ ] Revenue
-* [ ] Total Products
-* [ ] Inventory Value
-* [ ] Low Stock
-* [ ] Outstanding Customers
-* [ ] Outstanding Suppliers
+* [x] Today's Sales
+* [x] Today's Purchases
+* [x] Revenue
+* [x] Total Products
+* [x] Inventory Value
+* [x] Low Stock
+* [x] Outstanding Customers
+* [x] Outstanding Suppliers
 
 ---
 
@@ -213,11 +213,11 @@ Priority: P0
 
 ### Features
 
-* [ ] Inventory Report
-* [ ] Purchase Report
-* [ ] Sales Report
-* [ ] Customer Outstanding
-* [ ] Supplier Outstanding
+* [x] Inventory Report
+* [x] Purchase Report
+* [x] Sales Report
+* [x] Customer Outstanding
+* [x] Supplier Outstanding
 
 ---
 
@@ -227,11 +227,11 @@ Priority: P1
 
 ### Features
 
-* [ ] Business Preferences
-* [ ] Low Stock Threshold
-* [ ] Negative Stock Setting
-* [ ] Currency Format
-* [ ] Date Format
+* [x] Business Preferences
+* [x] Low Stock Threshold
+* [x] Negative Stock Setting
+* [x] Currency Format
+* [x] Date Format
 
 ---
 

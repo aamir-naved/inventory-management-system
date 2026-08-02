@@ -190,6 +190,56 @@ class PaymentControllerTest extends AuthenticatedControllerTestSupport {
             .andExpect(jsonPath("$.paymentStatus").value("PAID"));
     }
 
+    @Test
+    void purchaseReturnCanFlipPartialToPaid() throws Exception {
+        String supplierId = createSupplier();
+        String productId = createProduct();
+        // total 12600 (40 * 315), pay 9450 -> PARTIAL, outstanding 3150
+        String purchaseResponse = mockMvc.perform(post("/purchases")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "supplierId":"%s",
+                      "purchaseDate":"2026-08-01",
+                      "amountPaid":9450.00,
+                      "notes":"Restocking",
+                      "items":[{"productId":"%s","quantity":40.000,"purchasePrice":315.00}]
+                    }
+                    """.formatted(supplierId, productId)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.paymentStatus").value("PARTIAL"))
+            .andExpect(jsonPath("$.outstandingAmount").value(3150.0))
+            .andReturn().getResponse().getContentAsString();
+
+        String purchaseId = com.jayway.jsonpath.JsonPath.read(purchaseResponse, "$.id");
+        String purchaseItemId = com.jayway.jsonpath.JsonPath.read(purchaseResponse, "$.items[0].id");
+
+        // return 10 bags = 3150; net becomes 9450; paid 9450 -> PAID
+        mockMvc.perform(post("/purchases/{purchaseId}/returns", purchaseId)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "returnDate":"2026-08-02",
+                      "reason":"Unused stock",
+                      "items":[{"purchaseItemId":"%s","quantity":10.000}]
+                    }
+                    """.formatted(purchaseItemId)))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/purchases/{id}", purchaseId)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.netAmount").value(9450.0))
+            .andExpect(jsonPath("$.amountPaid").value(9450.0))
+            .andExpect(jsonPath("$.outstandingAmount").value(0.0))
+            .andExpect(jsonPath("$.paymentStatus").value("PAID"));
+    }
+
     private String createSale(String customerId, String productId, String amountPaid) throws Exception {
         String response = mockMvc.perform(post("/sales")
                 .header("Authorization", authorizationHeader)

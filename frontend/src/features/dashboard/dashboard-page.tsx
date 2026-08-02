@@ -1,22 +1,35 @@
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 
 import { useAuth } from "@/features/auth/auth-context";
+import { getDashboardMetrics } from "@/features/dashboard/dashboard-api";
+import { useBusinessSettings } from "@/features/settings/use-business-settings";
 
 export function DashboardPage() {
   const { session } = useAuth();
+  const businessId = session?.businessId ?? null;
+  const { formatMoney } = useBusinessSettings();
+
+  const metricsQuery = useQuery({
+    queryKey: ["dashboard-metrics", businessId],
+    queryFn: () => getDashboardMetrics(businessId!),
+    enabled: Boolean(businessId),
+  });
+
+  const metrics = metricsQuery.data;
 
   return (
     <>
       <section className="page-intro">
-        <span className="brand-kicker">Foundation dashboard</span>
+        <span className="brand-kicker">Live dashboard</span>
         <h1>Daily business visibility in one screen.</h1>
         <p>
-          These are starter cards and panels so future backend metrics can plug
-          in without changing the shell.
+          Today&apos;s sales and purchases, lifetime revenue, stock health, and
+          outstanding balances for the current business.
         </p>
       </section>
 
-      {!session?.businessId ? (
+      {!businessId ? (
         <section className="panel">
           <h3>Business setup is the next required step</h3>
           <p>
@@ -29,68 +42,63 @@ export function DashboardPage() {
         </section>
       ) : null}
 
+      {businessId && metricsQuery.isLoading ? (
+        <p className="inline-note">Loading dashboard metrics…</p>
+      ) : null}
+
+      {businessId && metricsQuery.isError ? (
+        <p className="inline-note">
+          Could not load dashboard metrics. Refresh to try again.
+        </p>
+      ) : null}
+
       <section className="card-grid">
         <article className="stat-card">
           <h3>Today&apos;s sales</h3>
-          <p>Ready for dashboard metrics API</p>
-          <div className="stat-value">₹0</div>
+          <p>Net sales amount for today</p>
+          <div className="stat-value">{formatMoney(metrics?.todaysSalesAmount)}</div>
         </article>
 
         <article className="stat-card">
-          <h3>Current stock value</h3>
-          <p>Inventory valuation placeholder</p>
-          <div className="stat-value">₹0</div>
+          <h3>Today&apos;s purchases</h3>
+          <p>Purchase total for today</p>
+          <div className="stat-value">{formatMoney(metrics?.todaysPurchasesAmount)}</div>
         </article>
 
         <article className="stat-card">
-          <h3>Low stock alerts</h3>
-          <p>Business-scoped warning count</p>
-          <div className="stat-value">0</div>
-        </article>
-      </section>
-
-      <section className="panel-stack">
-        <article className="panel">
-          <h3>MVP modules queued up</h3>
-          <div className="list">
-            <div className="list-row">
-              <span>Business setup</span>
-              <span className={`status-chip ${session?.businessId ? "status-chip--success" : "status-chip--warn"}`}>
-                {session?.businessId ? "Flow live" : "Next candidate"}
-              </span>
-            </div>
-            <div className="list-row">
-              <span>Product management</span>
-              <span className="status-chip status-chip--success">Flow live</span>
-            </div>
-            <div className="list-row">
-              <span>Inventory workflows</span>
-              <span className="status-chip status-chip--success">Flow live</span>
-            </div>
-            <div className="list-row">
-              <span>Purchase management</span>
-              <span className="status-chip status-chip--success">Flow live</span>
-            </div>
-            <div className="list-row">
-              <span>Sales management</span>
-              <span className="status-chip status-chip--success">Flow live</span>
-            </div>
-          </div>
+          <h3>Total revenue</h3>
+          <p>Lifetime net sales after returns</p>
+          <div className="stat-value">{formatMoney(metrics?.totalRevenue)}</div>
         </article>
 
-        <article className="panel">
-          <h3>What this foundation already gives us</h3>
-          <div className="list">
-            <div className="list-row">
-              <span>Central API client with `X-Business-Id` support</span>
-            </div>
-            <div className="list-row">
-              <span>Protected routes for authenticated product flows</span>
-            </div>
-            <div className="list-row">
-              <span>Feature folders that match the product docs and backend modules</span>
-            </div>
-          </div>
+        <article className="stat-card">
+          <h3>Total products</h3>
+          <p>Active catalog items</p>
+          <div className="stat-value">{metrics?.totalProducts ?? 0}</div>
+        </article>
+
+        <article className="stat-card">
+          <h3>Inventory value</h3>
+          <p>Cost price × current quantity</p>
+          <div className="stat-value">{formatMoney(metrics?.inventoryValue)}</div>
+        </article>
+
+        <article className="stat-card">
+          <h3>Low stock</h3>
+          <p>Products at or below threshold</p>
+          <div className="stat-value">{metrics?.lowStockProducts ?? 0}</div>
+        </article>
+
+        <article className="stat-card">
+          <h3>Outstanding customers</h3>
+          <p>Pending customer payments</p>
+          <div className="stat-value">{formatMoney(metrics?.outstandingCustomers)}</div>
+        </article>
+
+        <article className="stat-card">
+          <h3>Outstanding suppliers</h3>
+          <p>Pending supplier payments</p>
+          <div className="stat-value">{formatMoney(metrics?.outstandingSuppliers)}</div>
         </article>
       </section>
     </>

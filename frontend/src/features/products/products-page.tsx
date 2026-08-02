@@ -16,6 +16,7 @@ import {
   type ProductPayload,
   type ProductRecord,
 } from "@/features/products/product-api";
+import { useBusinessSettings } from "@/features/settings/use-business-settings";
 
 const initialForm: ProductPayload = {
   name: "",
@@ -45,6 +46,7 @@ export function ProductsPage() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const businessId = session?.businessId ?? null;
+  const { formatMoney, defaultLowStockThreshold } = useBusinessSettings();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [includeArchived, setIncludeArchived] = useState(false);
@@ -52,6 +54,13 @@ export function ProductsPage() {
   const [form, setForm] = useState<ProductPayload>(initialForm);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  function blankForm(): ProductPayload {
+    return {
+      ...initialForm,
+      lowStockThreshold: defaultLowStockThreshold,
+    };
+  }
 
   const productsQuery = useQuery({
     queryKey: ["products", businessId, deferredSearch, includeArchived],
@@ -66,12 +75,12 @@ export function ProductsPage() {
 
   useEffect(() => {
     if (!selectedProduct) {
-      setForm(initialForm);
+      setForm(blankForm());
       return;
     }
 
     setForm(toPayload(selectedProduct));
-  }, [selectedProduct]);
+  }, [selectedProduct, defaultLowStockThreshold]);
 
   const saveMutation = useMutation({
     mutationFn: async (payload: ProductPayload) => {
@@ -140,7 +149,7 @@ export function ProductsPage() {
 
   function resetForm() {
     setSelectedProduct(null);
-    setForm(initialForm);
+    setForm(blankForm());
     setFieldErrors({});
     setFeedback(null);
   }
@@ -363,8 +372,8 @@ export function ProductsPage() {
 
                 <div className="product-metrics">
                   <span>SKU: {product.sku ?? "Not set"}</span>
-                  <span>Cost: ₹{Number(product.costPrice).toFixed(2)}</span>
-                  <span>Selling: ₹{Number(product.sellingPrice).toFixed(2)}</span>
+                  <span>Cost: {formatMoney(product.costPrice)}</span>
+                  <span>Selling: {formatMoney(product.sellingPrice)}</span>
                   <span>Stock: {Number(product.currentStock).toFixed(3)}</span>
                   <span>Low stock at: {Number(product.lowStockThreshold).toFixed(3)}</span>
                 </div>

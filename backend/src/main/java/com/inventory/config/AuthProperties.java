@@ -8,7 +8,12 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class AuthProperties {
 
     private String jwtSecret = "inventory-management-system-super-secret-key-for-development-only-2026";
-    private Duration accessTokenTtl = Duration.ofHours(12);
+    private Duration accessTokenTtl = Duration.ofHours(1);
+    private Duration refreshTokenTtl = Duration.ofDays(14);
+    private Duration emailVerifyTokenTtl = Duration.ofHours(24);
+    private Duration passwordResetTokenTtl = Duration.ofHours(1);
+    private String publicAppUrl = "http://localhost:5173";
+    private String mailFrom = "noreply@inventory.local";
 
     public String getJwtSecret() {
         return jwtSecret;
@@ -24,5 +29,45 @@ public class AuthProperties {
 
     public void setAccessTokenTtl(Duration accessTokenTtl) {
         this.accessTokenTtl = accessTokenTtl;
+    }
+
+    public Duration getRefreshTokenTtl() {
+        return refreshTokenTtl;
+    }
+
+    public void setRefreshTokenTtl(Duration refreshTokenTtl) {
+        this.refreshTokenTtl = refreshTokenTtl;
+    }
+
+    public Duration getEmailVerifyTokenTtl() {
+        return emailVerifyTokenTtl;
+    }
+
+    public void setEmailVerifyTokenTtl(Duration emailVerifyTokenTtl) {
+        this.emailVerifyTokenTtl = emailVerifyTokenTtl;
+    }
+
+    public Duration getPasswordResetTokenTtl() {
+        return passwordResetTokenTtl;
+    }
+
+    public void setPasswordResetTokenTtl(Duration passwordResetTokenTtl) {
+        this.passwordResetTokenTtl = passwordResetTokenTtl;
+    }
+
+    public String getPublicAppUrl() {
+        return publicAppUrl;
+    }
+
+    public void setPublicAppUrl(String publicAppUrl) {
+        this.publicAppUrl = publicAppUrl;
+    }
+
+    public String getMailFrom() {
+        return mailFrom;
+    }
+
+    public void setMailFrom(String mailFrom) {
+        this.mailFrom = mailFrom;
     }
 }

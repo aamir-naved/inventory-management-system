@@ -1,5 +1,6 @@
 package com.inventory.business.service;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -46,6 +47,9 @@ public class BusinessService {
 
         Business business = new Business();
         applyRequest(business, request);
+        business.setAllowNegativeStock(false);
+        business.setDefaultLowStockThreshold(BigDecimal.ZERO);
+        business.setDateFormat("dd/MM/yyyy");
         business.setActive(true);
 
         Business savedBusiness = businessRepository.save(business);

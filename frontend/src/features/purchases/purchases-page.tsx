@@ -8,19 +8,27 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/http-client";
 import { useAuth } from "@/features/auth/auth-context";
+import { useBusinessSettings } from "@/features/settings/use-business-settings";
 import {
   createPurchasePayment,
   listPurchasePayments,
   type PaymentPayload,
 } from "@/features/payments/payment-api";
 import {
+  downloadPurchaseBill,
+  printPurchaseBill,
+} from "@/features/documents/document-api";
+import {
   createPurchase,
+  createPurchaseReturn,
   cancelPurchase,
+  listPurchaseReturns,
   listPurchases,
   updatePurchase,
   type PurchaseItemPayload,
   type PurchasePayload,
   type PurchaseRecord,
+  type PurchaseReturnPayload,
 } from "@/features/purchases/purchase-api";
 import {
   createSupplier,
@@ -66,12 +74,19 @@ export function PurchasesPage() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const businessId = session?.businessId ?? null;
+  const { formatMoney, formatDate } = useBusinessSettings();
   const [supplierForm, setSupplierForm] = useState<SupplierPayload>(initialSupplier);
   const [purchaseForm, setPurchaseForm] = useState<PurchasePayload>(initialPurchase);
   const [purchaseSearch, setPurchaseSearch] = useState("");
   const deferredPurchaseSearch = useDeferredValue(purchaseSearch);
   const [selectedPurchase, setSelectedPurchase] = useState<PurchaseRecord | null>(null);
   const [cancellationReason, setCancellationReason] = useState("");
+  const [returnForm, setReturnForm] = useState<PurchaseReturnPayload>({
+    returnDate: new Date().toISOString().slice(0, 10),
+    reason: "",
+    notes: "",
+    items: [],
+  });
   const [paymentForm, setPaymentForm] = useState<PaymentPayload>(initialPaymentForm);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -92,6 +107,12 @@ export function PurchasesPage() {
     queryKey: ["purchases", businessId, deferredPurchaseSearch],
     queryFn: () => listPurchases(businessId!, deferredPurchaseSearch),
     enabled: Boolean(businessId),
+  });
+
+  const purchaseReturnsQuery = useQuery({
+    queryKey: ["purchase-returns", businessId, selectedPurchase?.id],
+    queryFn: () => listPurchaseReturns(businessId!, selectedPurchase!.id),
+    enabled: Boolean(businessId && selectedPurchase?.id),
   });
 
   const purchasePaymentsQuery = useQuery({
@@ -214,6 +235,52 @@ export function PurchasesPage() {
     onError: handleApiError,
   });
 
+  const returnPurchaseMutation = useMutation({
+    mutationFn: async () => {
+      if (!businessId || !selectedPurchase) {
+        throw new Error("Select a purchase before recording a return.");
+      }
+
+      const items = returnForm.items.filter((item) => item.quantity > 0);
+      if (items.length === 0) {
+        throw new Error("Add at least one return quantity.");
+      }
+
+      return createPurchaseReturn(businessId, selectedPurchase.id, {
+        ...returnForm,
+        items,
+      });
+    },
+    onSuccess: async (purchaseReturn) => {
+      setFeedback("Purchase return recorded and stock reduced.");
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["purchases", businessId] }),
+        queryClient.invalidateQueries({ queryKey: ["purchase-returns", businessId] }),
+        queryClient.invalidateQueries({ queryKey: ["purchase-payments", businessId] }),
+        queryClient.invalidateQueries({ queryKey: ["inventory-summary", businessId] }),
+        queryClient.invalidateQueries({ queryKey: ["inventory-stock", businessId] }),
+        queryClient.invalidateQueries({ queryKey: ["inventory-movements", businessId] }),
+        queryClient.invalidateQueries({ queryKey: ["products", businessId] }),
+      ]);
+
+      const purchases = await queryClient.fetchQuery({
+        queryKey: ["purchases", businessId, deferredPurchaseSearch],
+        queryFn: () => listPurchases(businessId!, deferredPurchaseSearch),
+      });
+      const refreshed = purchases.find((purchase) => purchase.id === purchaseReturn.purchaseId);
+      if (refreshed) {
+        selectPurchase(refreshed);
+      }
+    },
+    onError: (error) => {
+      if (error instanceof Error && !(error instanceof ApiError)) {
+        setFeedback(error.message);
+        return;
+      }
+      handleApiError(error);
+    },
+  });
+
   function handleApiError(error: unknown) {
     if (error instanceof ApiError && typeof error.details === "object" && error.details !== null) {
       const response = error.details as {
@@ -231,6 +298,22 @@ export function PurchasesPage() {
 
   const purchaseTotal = useMemo(() => summarizeTotal(purchaseForm.items), [purchaseForm.items]);
 
+  const returnTotal = useMemo(() => {
+    if (!selectedPurchase) {
+      return 0;
+    }
+
+    return returnForm.items.reduce((total, item) => {
+      const purchaseItem = selectedPurchase.items.find(
+        (candidate) => candidate.id === item.purchaseItemId,
+      );
+      if (!purchaseItem) {
+        return total;
+      }
+      return total + item.quantity * Number(purchaseItem.purchasePrice);
+    }, 0);
+  }, [returnForm.items, selectedPurchase]);
+
   function selectPurchase(purchase: PurchaseRecord) {
     setSelectedPurchase(purchase);
     setCancellationReason("");
@@ -239,8 +322,38 @@ export function PurchasesPage() {
       paymentDate: new Date().toISOString().slice(0, 10),
       amount: Number(purchase.outstandingAmount) > 0 ? Number(purchase.outstandingAmount) : 0,
     });
+    setReturnForm({
+      returnDate: new Date().toISOString().slice(0, 10),
+      reason: "",
+      notes: "",
+      items: purchase.items
+        .filter((item) => Number(item.returnableQuantity) > 0)
+        .map((item) => ({
+          purchaseItemId: item.id,
+          quantity: 0,
+        })),
+    });
     setFeedback(null);
     setFieldErrors({});
+  }
+
+  function updateReturnQuantity(purchaseItemId: string, quantity: number) {
+    setReturnForm((current) => {
+      const existing = current.items.find((item) => item.purchaseItemId === purchaseItemId);
+      if (!existing) {
+        return {
+          ...current,
+          items: [...current.items, { purchaseItemId, quantity }],
+        };
+      }
+
+      return {
+        ...current,
+        items: current.items.map((item) =>
+          item.purchaseItemId === purchaseItemId ? { ...item, quantity } : item,
+        ),
+      };
+    });
   }
 
   function addItem() {
@@ -520,7 +633,7 @@ export function PurchasesPage() {
                     />
 
                     <span className="purchase-item-total">
-                      ₹{(item.quantity * item.purchasePrice).toFixed(2)}
+                      {formatMoney(item.quantity * item.purchasePrice)}
                       {product ? ` · ${product.unit}` : ""}
                     </span>
 
@@ -534,7 +647,7 @@ export function PurchasesPage() {
 
             <div className="purchase-total">
               <strong>Total purchase amount</strong>
-              <span>₹{purchaseTotal.toFixed(2)}</span>
+              <span>{formatMoney(purchaseTotal)}</span>
             </div>
 
             {feedback ? <p className="inline-note">{feedback}</p> : null}
@@ -575,7 +688,7 @@ export function PurchasesPage() {
                   <div>
                     <h4>{purchase.purchaseNumber}</h4>
                     <p>
-                      {purchase.supplierName} · {purchase.purchaseDate}
+                      {purchase.supplierName} · {formatDate(purchase.purchaseDate)}
                     </p>
                   </div>
                   <span
@@ -589,9 +702,13 @@ export function PurchasesPage() {
 
                 <div className="product-metrics">
                   <span>Items: {purchase.items.length}</span>
-                  <span>Total: ₹{Number(purchase.totalAmount).toFixed(2)}</span>
-                  <span>Paid: ₹{Number(purchase.amountPaid).toFixed(2)}</span>
-                  <span>Due: ₹{Number(purchase.outstandingAmount).toFixed(2)}</span>
+                  <span>Total: {formatMoney(purchase.totalAmount)}</span>
+                  {Number(purchase.returnedAmount) > 0 ? (
+                    <span>Returned: {formatMoney(purchase.returnedAmount)}</span>
+                  ) : null}
+                  <span>Net: {formatMoney(purchase.netAmount)}</span>
+                  <span>Paid: {formatMoney(purchase.amountPaid)}</span>
+                  <span>Due: {formatMoney(purchase.outstandingAmount)}</span>
                 </div>
 
                 <div className="product-card__actions">
@@ -614,21 +731,62 @@ export function PurchasesPage() {
             </div>
 
             <div className="product-metrics">
-              <span>Total: ₹{Number(selectedPurchase.totalAmount).toFixed(2)}</span>
-              <span>Paid: ₹{Number(selectedPurchase.amountPaid).toFixed(2)}</span>
-              <span>Outstanding: ₹{Number(selectedPurchase.outstandingAmount).toFixed(2)}</span>
+              <span>Total: {formatMoney(selectedPurchase.totalAmount)}</span>
+              <span>Returned: {formatMoney(selectedPurchase.returnedAmount)}</span>
+              <span>Net: {formatMoney(selectedPurchase.netAmount)}</span>
+              <span>Paid: {formatMoney(selectedPurchase.amountPaid)}</span>
+              <span>Outstanding: {formatMoney(selectedPurchase.outstandingAmount)}</span>
               <span>Status: {selectedPurchase.paymentStatus}</span>
             </div>
 
             <div className="purchase-detail-list">
               {selectedPurchase.items.map((item) => (
-                <div key={item.productId} className="list-row">
+                <div key={item.id} className="list-row">
                   <span>{item.productName}</span>
                   <span>
-                    {Number(item.quantity).toFixed(3)} × ₹{Number(item.purchasePrice).toFixed(2)} = ₹{Number(item.lineTotal).toFixed(2)}
+                    Bought {Number(item.quantity).toFixed(3)} · Returned{" "}
+                    {Number(item.returnedQuantity).toFixed(3)} · Left{" "}
+                    {Number(item.returnableQuantity).toFixed(3)} · {formatMoney(item.purchasePrice)}
                   </span>
                 </div>
               ))}
+            </div>
+
+            <div className="product-card__actions">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={async () => {
+                  try {
+                    setFeedback(null);
+                    await downloadPurchaseBill(businessId, selectedPurchase.id);
+                    setFeedback("Purchase bill downloaded.");
+                  } catch (error) {
+                    handleApiError(error);
+                  }
+                }}
+              >
+                Download bill
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={async () => {
+                  try {
+                    setFeedback(null);
+                    await printPurchaseBill(businessId, selectedPurchase.id);
+                    setFeedback("Purchase bill opened for printing.");
+                  } catch (error) {
+                    if (error instanceof Error && !(error instanceof ApiError)) {
+                      setFeedback(error.message);
+                      return;
+                    }
+                    handleApiError(error);
+                  }
+                }}
+              >
+                Print bill
+              </button>
             </div>
 
             {!selectedPurchase.cancelled ? (
@@ -677,8 +835,8 @@ export function PurchasesPage() {
                       <div>
                         <h3>Record payment</h3>
                         <p>
-                          Outstanding ₹{Number(selectedPurchase.outstandingAmount).toFixed(2)}.
-                          Status updates automatically from paid vs total.
+                          Outstanding {formatMoney(selectedPurchase.outstandingAmount)}. Status
+                          updates automatically from paid vs net amount.
                         </p>
                       </div>
                     </div>
@@ -766,7 +924,151 @@ export function PurchasesPage() {
                           {payment.paymentDate}
                           {payment.notes ? ` · ${payment.notes}` : ""}
                         </span>
-                        <span>₹{Number(payment.amount).toFixed(2)}</span>
+                        <span>{formatMoney(payment.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {selectedPurchase.items.some((item) => Number(item.returnableQuantity) > 0) ? (
+                  <div className="form-stack">
+                    <div className="panel-heading">
+                      <div>
+                        <h3>Record purchase return</h3>
+                        <p>
+                          Return stock to the supplier. Stock is reduced for the returned quantity.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="split-grid">
+                      <div className="field">
+                        <label htmlFor="purchase-return-date">Return date</label>
+                        <input
+                          id="purchase-return-date"
+                          type="date"
+                          value={returnForm.returnDate}
+                          onChange={(event) =>
+                            setReturnForm((current) => ({
+                              ...current,
+                              returnDate: event.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+
+                      <div className="field">
+                        <label htmlFor="purchase-return-reason">Reason</label>
+                        <input
+                          id="purchase-return-reason"
+                          value={returnForm.reason}
+                          onChange={(event) =>
+                            setReturnForm((current) => ({
+                              ...current,
+                              reason: event.target.value,
+                            }))
+                          }
+                          placeholder="Damaged bags"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="field">
+                      <label htmlFor="purchase-return-notes">Notes</label>
+                      <input
+                        id="purchase-return-notes"
+                        value={returnForm.notes}
+                        onChange={(event) =>
+                          setReturnForm((current) => ({
+                            ...current,
+                            notes: event.target.value,
+                          }))
+                        }
+                        placeholder="Sent unused stock back to supplier"
+                      />
+                    </div>
+
+                    {selectedPurchase.items
+                      .filter((item) => Number(item.returnableQuantity) > 0)
+                      .map((item) => {
+                        const quantity =
+                          returnForm.items.find(
+                            (candidate) => candidate.purchaseItemId === item.id,
+                          )?.quantity ?? 0;
+
+                        return (
+                          <div key={item.id} className="purchase-item-row">
+                            <span>
+                              {item.productName} · up to {Number(item.returnableQuantity).toFixed(3)}{" "}
+                              {item.unit}
+                            </span>
+                            <input
+                              type="number"
+                              min="0"
+                              max={Number(item.returnableQuantity)}
+                              step="0.001"
+                              value={quantity}
+                              onChange={(event) =>
+                                updateReturnQuantity(item.id, Number(event.target.value))
+                              }
+                              placeholder="Return qty"
+                            />
+                            <span className="purchase-item-total">
+                              {formatMoney(quantity * Number(item.purchasePrice))}
+                            </span>
+                          </div>
+                        );
+                      })}
+
+                    <div className="purchase-total">
+                      <strong>Return amount</strong>
+                      <span>{formatMoney(returnTotal)}</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="primary-button"
+                      disabled={returnPurchaseMutation.isPending}
+                      onClick={() => {
+                        setFieldErrors({});
+                        setFeedback(null);
+                        returnPurchaseMutation.mutate();
+                      }}
+                    >
+                      {returnPurchaseMutation.isPending
+                        ? "Recording return..."
+                        : "Record purchase return"}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="empty-inline-state">
+                    <strong>Nothing left to return</strong>
+                    <p>All purchased quantities on this bill have already been returned.</p>
+                  </div>
+                )}
+
+                {purchaseReturnsQuery.data && purchaseReturnsQuery.data.length > 0 ? (
+                  <div className="form-stack">
+                    <div className="panel-heading">
+                      <div>
+                        <h3>Returns on this purchase</h3>
+                        <p>Earlier purchase returns linked to {selectedPurchase.purchaseNumber}.</p>
+                      </div>
+                    </div>
+                    {purchaseReturnsQuery.data.map((purchaseReturn) => (
+                      <div key={purchaseReturn.id} className="empty-inline-state">
+                        <strong>
+                          {purchaseReturn.returnNumber} · {formatMoney(purchaseReturn.totalAmount)}
+                        </strong>
+                        <p>
+                          {purchaseReturn.returnDate}
+                          {purchaseReturn.reason ? ` · ${purchaseReturn.reason}` : ""}
+                        </p>
+                        {purchaseReturn.items.map((item) => (
+                          <p key={item.id}>
+                            {item.productName}: {Number(item.quantity).toFixed(3)} {item.unit}
+                          </p>
+                        ))}
                       </div>
                     ))}
                   </div>
@@ -779,13 +1081,21 @@ export function PurchasesPage() {
                     value={cancellationReason}
                     onChange={(event) => setCancellationReason(event.target.value)}
                     placeholder="Duplicate bill from supplier"
+                    disabled={selectedPurchase.hasReturns}
                   />
                 </div>
+
+                {selectedPurchase.hasReturns ? (
+                  <p className="inline-note">
+                    This purchase has returns, so it cannot be cancelled. Record another purchase
+                    return instead if needed.
+                  </p>
+                ) : null}
 
                 <button
                   type="button"
                   className="ghost-button ghost-button--danger"
-                  disabled={cancelPurchaseMutation.isPending}
+                  disabled={cancelPurchaseMutation.isPending || selectedPurchase.hasReturns}
                   onClick={() => cancelPurchaseMutation.mutate()}
                 >
                   {cancelPurchaseMutation.isPending ? "Cancelling..." : "Cancel purchase"}

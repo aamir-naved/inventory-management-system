@@ -16,6 +16,7 @@ import {
   type InventoryAdjustmentPayload,
   type InventoryStockItem,
 } from "@/features/inventory/inventory-api";
+import { useBusinessSettings } from "@/features/settings/use-business-settings";
 
 const initialAdjustment: InventoryAdjustmentPayload = {
   productId: "",
@@ -27,6 +28,7 @@ export function InventoryPage() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const businessId = session?.businessId ?? null;
+  const { formatMoney, formatDateTime } = useBusinessSettings();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
   const [lowStockOnly, setLowStockOnly] = useState(false);
@@ -150,7 +152,7 @@ export function InventoryPage() {
         <article className="stat-card">
           <h3>Current stock value</h3>
           <p>Based on cost price × current quantity</p>
-          <div className="stat-value">₹{Number(summaryQuery.data?.totalStockValue ?? 0).toFixed(2)}</div>
+          <div className="stat-value">{formatMoney(summaryQuery.data?.totalStockValue)}</div>
         </article>
         <article className="stat-card">
           <h3>Low stock alerts</h3>
@@ -227,7 +229,7 @@ export function InventoryPage() {
                 <div className="product-metrics">
                   <span>Current stock: {Number(item.currentStock).toFixed(3)}</span>
                   <span>Threshold: {Number(item.lowStockThreshold).toFixed(3)}</span>
-                  <span>Value: ₹{Number(item.stockValue).toFixed(2)}</span>
+                  <span>Value: {formatMoney(item.stockValue)}</span>
                   <span>SKU: {item.sku ?? "Not set"}</span>
                 </div>
 
@@ -316,7 +318,7 @@ export function InventoryPage() {
                     <article key={movement.id} className="movement-card">
                       <div className="product-card__row">
                         <strong>{movement.movementType.split("_").join(" ")}</strong>
-                        <span>{new Date(movement.createdAt).toLocaleString()}</span>
+                        <span>{formatDateTime(movement.createdAt)}</span>
                       </div>
                       <p>{movement.notes ?? "No notes"}</p>
                       <div className="product-metrics">

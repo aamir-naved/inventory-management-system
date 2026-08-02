@@ -8,6 +8,7 @@ import com.inventory.payment.repository.PaymentRepository;
 import com.inventory.payment.support.PaymentAmounts;
 import com.inventory.purchase.entity.Purchase;
 import com.inventory.purchase.repository.PurchaseRepository;
+import com.inventory.purchase.repository.PurchaseReturnRepository;
 import com.inventory.sales.entity.Sale;
 import com.inventory.sales.repository.SaleRepository;
 import com.inventory.sales.repository.SaleReturnRepository;
@@ -28,17 +29,20 @@ public class PaymentService {
     private final SaleRepository saleRepository;
     private final PurchaseRepository purchaseRepository;
     private final SaleReturnRepository saleReturnRepository;
+    private final PurchaseReturnRepository purchaseReturnRepository;
 
     public PaymentService(
         PaymentRepository paymentRepository,
         SaleRepository saleRepository,
         PurchaseRepository purchaseRepository,
-        SaleReturnRepository saleReturnRepository
+        SaleReturnRepository saleReturnRepository,
+        PurchaseReturnRepository purchaseReturnRepository
     ) {
         this.paymentRepository = paymentRepository;
         this.saleRepository = saleRepository;
         this.purchaseRepository = purchaseRepository;
         this.saleReturnRepository = saleReturnRepository;
+        this.purchaseReturnRepository = purchaseReturnRepository;
     }
 
     public PaymentResponse createForSale(UUID saleId, PaymentRequest request) {
@@ -97,7 +101,7 @@ public class PaymentService {
         }
 
         BigDecimal paymentAmount = requirePositiveAmount(amount);
-        BigDecimal billable = purchase.getTotalAmount();
+        BigDecimal billable = purchaseBillableAmount(purchase);
         BigDecimal currentPaid = nullSafe(purchase.getAmountPaid());
         BigDecimal nextPaid = currentPaid.add(paymentAmount);
 
@@ -125,6 +129,12 @@ public class PaymentService {
         BigDecimal amountPaid = nullSafe(sale.getAmountPaid());
         BigDecimal billable = saleBillableAmount(sale);
         sale.setPaymentStatus(PaymentAmounts.deriveStatus(amountPaid, billable));
+    }
+
+    public void syncPurchasePaymentStatus(Purchase purchase) {
+        BigDecimal amountPaid = nullSafe(purchase.getAmountPaid());
+        BigDecimal billable = purchaseBillableAmount(purchase);
+        purchase.setPaymentStatus(PaymentAmounts.deriveStatus(amountPaid, billable));
     }
 
     @Transactional(readOnly = true)
@@ -161,6 +171,14 @@ public class PaymentService {
             sale.getId()
         );
         return sale.getTotalAmount().subtract(nullSafe(returnedAmount));
+    }
+
+    private BigDecimal purchaseBillableAmount(Purchase purchase) {
+        BigDecimal returnedAmount = purchaseReturnRepository.sumReturnedAmountForPurchase(
+            purchase.getBusinessId(),
+            purchase.getId()
+        );
+        return purchase.getTotalAmount().subtract(nullSafe(returnedAmount));
     }
 
     private Sale findSale(UUID saleId) {

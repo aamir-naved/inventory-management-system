@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { useAuth } from "@/features/auth/auth-context";
@@ -9,9 +10,14 @@ const navItems = [
     detail: "Quick pulse",
   },
   {
+    to: "/profile",
+    label: "Profile",
+    detail: "Account",
+  },
+  {
     to: "/business-setup",
     label: "Business",
-    detail: "Profile",
+    detail: "Workspace",
   },
   {
     to: "/products",
@@ -24,6 +30,16 @@ const navItems = [
     detail: "Stock",
   },
   {
+    to: "/suppliers",
+    label: "Suppliers",
+    detail: "Parties",
+  },
+  {
+    to: "/customers",
+    label: "Customers",
+    detail: "Parties",
+  },
+  {
     to: "/purchases",
     label: "Purchases",
     detail: "Live",
@@ -33,10 +49,35 @@ const navItems = [
     label: "Sales",
     detail: "Live",
   },
+  {
+    to: "/reports",
+    label: "Reports",
+    detail: "Insights",
+  },
+  {
+    to: "/settings",
+    label: "Settings",
+    detail: "Prefs",
+  },
 ];
 
 export function AppLayout() {
-  const { session, logout } = useAuth();
+  const { session, logout, resendVerification } = useAuth();
+  const [bannerMessage, setBannerMessage] = useState<string | null>(null);
+  const [isResending, setIsResending] = useState(false);
+
+  async function handleResendVerification() {
+    setIsResending(true);
+    setBannerMessage(null);
+    try {
+      const message = await resendVerification();
+      setBannerMessage(message);
+    } catch {
+      setBannerMessage("Unable to resend verification email right now.");
+    } finally {
+      setIsResending(false);
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -86,11 +127,39 @@ export function AppLayout() {
             <span className="badge">
               {session?.businessId ? "Business ID wired" : "Setup pending"}
             </span>
-            <button type="button" className="ghost-button" onClick={logout}>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                void logout();
+              }}
+            >
               Sign out
             </button>
           </div>
         </header>
+
+        {session && !session.emailVerified ? (
+          <div className="verify-banner" role="status">
+            <div>
+              <strong>Please verify your email.</strong>
+              <p>
+                {bannerMessage ??
+                  `We sent a verification link to ${session.email}. You can keep using the app meanwhile.`}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="ghost-button"
+              disabled={isResending}
+              onClick={() => {
+                void handleResendVerification();
+              }}
+            >
+              {isResending ? "Sending..." : "Resend email"}
+            </button>
+          </div>
+        ) : null}
 
         <main className="page">
           <Outlet />

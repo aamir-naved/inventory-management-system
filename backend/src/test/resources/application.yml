@@ -13,3 +13,6 @@ spring:
 app:
   auth:
     jwt-secret: inventory-management-system-test-secret-key-for-jwt-signing-2026
+    access-token-ttl: PT1H
+    refresh-token-ttl: P14D
+    public-app-url: http://localhost:5173

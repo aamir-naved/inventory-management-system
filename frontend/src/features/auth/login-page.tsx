@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 
 import { ApiError } from "@/api/http-client";
 import { useAuth } from "@/features/auth/auth-context";
@@ -44,6 +44,7 @@ function EyeIcon({ open }: { open: boolean }) {
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, register } = useAuth();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [form, setForm] = useState({
@@ -53,7 +54,14 @@ export function LoginPage() {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(
+    location.state &&
+      typeof location.state === "object" &&
+      "resetSuccess" in location.state &&
+      location.state.resetSuccess
+      ? "Password reset successful. Sign in with your new password."
+      : null,
+  );
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   function switchMode(nextMode: "login" | "register") {
@@ -218,7 +226,12 @@ export function LoginPage() {
           </div>
 
           {feedback ? (
-            <div className="form-error" role="alert">
+            <div
+              className={
+                feedback.includes("successful") ? "form-success" : "form-error"
+              }
+              role="alert"
+            >
               {feedback}
             </div>
           ) : null}
@@ -232,6 +245,12 @@ export function LoginPage() {
                 ? "Enter dashboard"
                 : "Create account"}
           </button>
+
+          {mode === "login" ? (
+            <Link to="/forgot-password" className="text-link">
+              Forgot password?
+            </Link>
+          ) : null}
         </form>
       </div>
     </section>

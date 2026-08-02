@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/http-client";
 import { useAuth } from "@/features/auth/auth-context";
+import { useBusinessSettings } from "@/features/settings/use-business-settings";
 import {
   createCustomer,
   listCustomers,
@@ -19,6 +20,10 @@ import {
   listSalePayments,
   type PaymentPayload,
 } from "@/features/payments/payment-api";
+import {
+  downloadSaleInvoice,
+  printSaleInvoice,
+} from "@/features/documents/document-api";
 import {
   cancelSale,
   createSale,
@@ -69,6 +74,7 @@ export function SalesPage() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const businessId = session?.businessId ?? null;
+  const { formatMoney, formatDate } = useBusinessSettings();
   const [customerForm, setCustomerForm] = useState<CustomerPayload>(initialCustomer);
   const [saleForm, setSaleForm] = useState<SalePayload>(initialSale);
   const [saleSearch, setSaleSearch] = useState("");
@@ -629,7 +635,7 @@ export function SalesPage() {
                     />
 
                     <span className="purchase-item-total">
-                      ₹{(item.quantity * item.sellingPrice).toFixed(2)}
+                      {formatMoney(item.quantity * item.sellingPrice)}
                       {product ? ` · ${product.unit} · Stock ${Number(product.currentStock).toFixed(3)}` : ""}
                     </span>
 
@@ -643,7 +649,7 @@ export function SalesPage() {
 
             <div className="purchase-total">
               <strong>Total sale amount</strong>
-              <span>₹{saleTotal.toFixed(2)}</span>
+              <span>{formatMoney(saleTotal)}</span>
             </div>
 
             {feedback ? <p className="inline-note">{feedback}</p> : null}
@@ -684,7 +690,7 @@ export function SalesPage() {
                   <div>
                     <h4>{sale.saleNumber}</h4>
                     <p>
-                      {sale.customerName} · {sale.saleDate}
+                      {sale.customerName} · {formatDate(sale.saleDate)}
                     </p>
                   </div>
                   <span
@@ -698,13 +704,13 @@ export function SalesPage() {
 
                 <div className="product-metrics">
                   <span>Items: {sale.items.length}</span>
-                  <span>Total: ₹{Number(sale.totalAmount).toFixed(2)}</span>
+                  <span>Total: {formatMoney(sale.totalAmount)}</span>
                   {Number(sale.returnedAmount) > 0 ? (
-                    <span>Returned: ₹{Number(sale.returnedAmount).toFixed(2)}</span>
+                    <span>Returned: {formatMoney(sale.returnedAmount)}</span>
                   ) : null}
-                  <span>Net: ₹{Number(sale.netAmount).toFixed(2)}</span>
-                  <span>Paid: ₹{Number(sale.amountPaid).toFixed(2)}</span>
-                  <span>Due: ₹{Number(sale.outstandingAmount).toFixed(2)}</span>
+                  <span>Net: {formatMoney(sale.netAmount)}</span>
+                  <span>Paid: {formatMoney(sale.amountPaid)}</span>
+                  <span>Due: {formatMoney(sale.outstandingAmount)}</span>
                 </div>
 
                 <div className="product-card__actions">
@@ -727,11 +733,11 @@ export function SalesPage() {
             </div>
 
             <div className="product-metrics">
-              <span>Total: ₹{Number(selectedSale.totalAmount).toFixed(2)}</span>
-              <span>Returned: ₹{Number(selectedSale.returnedAmount).toFixed(2)}</span>
-              <span>Net: ₹{Number(selectedSale.netAmount).toFixed(2)}</span>
-              <span>Paid: ₹{Number(selectedSale.amountPaid).toFixed(2)}</span>
-              <span>Outstanding: ₹{Number(selectedSale.outstandingAmount).toFixed(2)}</span>
+              <span>Total: {formatMoney(selectedSale.totalAmount)}</span>
+              <span>Returned: {formatMoney(selectedSale.returnedAmount)}</span>
+              <span>Net: {formatMoney(selectedSale.netAmount)}</span>
+              <span>Paid: {formatMoney(selectedSale.amountPaid)}</span>
+              <span>Outstanding: {formatMoney(selectedSale.outstandingAmount)}</span>
               <span>Status: {selectedSale.paymentStatus}</span>
             </div>
 
@@ -742,11 +748,47 @@ export function SalesPage() {
                   <span>
                     Sold {Number(item.quantity).toFixed(3)} · Returned{" "}
                     {Number(item.returnedQuantity).toFixed(3)} · Left{" "}
-                    {Number(item.returnableQuantity).toFixed(3)} · ₹
-                    {Number(item.sellingPrice).toFixed(2)}
+                    {Number(item.returnableQuantity).toFixed(3)} · {formatMoney(item.sellingPrice)}
                   </span>
                 </div>
               ))}
+            </div>
+
+            <div className="product-card__actions">
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={async () => {
+                  try {
+                    setFeedback(null);
+                    await downloadSaleInvoice(businessId, selectedSale.id);
+                    setFeedback("Invoice downloaded.");
+                  } catch (error) {
+                    handleApiError(error);
+                  }
+                }}
+              >
+                Download invoice
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={async () => {
+                  try {
+                    setFeedback(null);
+                    await printSaleInvoice(businessId, selectedSale.id);
+                    setFeedback("Invoice opened for printing.");
+                  } catch (error) {
+                    if (error instanceof Error && !(error instanceof ApiError)) {
+                      setFeedback(error.message);
+                      return;
+                    }
+                    handleApiError(error);
+                  }
+                }}
+              >
+                Print invoice
+              </button>
             </div>
 
             {!selectedSale.cancelled ? (
@@ -795,7 +837,7 @@ export function SalesPage() {
                       <div>
                         <h3>Record payment</h3>
                         <p>
-                          Outstanding ₹{Number(selectedSale.outstandingAmount).toFixed(2)}. Status
+                          Outstanding {formatMoney(selectedSale.outstandingAmount)}. Status
                           updates automatically from paid vs net amount.
                         </p>
                       </div>
@@ -884,7 +926,7 @@ export function SalesPage() {
                           {payment.paymentDate}
                           {payment.notes ? ` · ${payment.notes}` : ""}
                         </span>
-                        <span>₹{Number(payment.amount).toFixed(2)}</span>
+                        <span>{formatMoney(payment.amount)}</span>
                       </div>
                     ))}
                   </div>
@@ -971,7 +1013,7 @@ export function SalesPage() {
                               placeholder="Return qty"
                             />
                             <span className="purchase-item-total">
-                              ₹{(quantity * Number(item.sellingPrice)).toFixed(2)}
+                              {formatMoney(quantity * Number(item.sellingPrice))}
                             </span>
                           </div>
                         );
@@ -979,7 +1021,7 @@ export function SalesPage() {
 
                     <div className="purchase-total">
                       <strong>Return amount</strong>
-                      <span>₹{returnTotal.toFixed(2)}</span>
+                      <span>{formatMoney(returnTotal)}</span>
                     </div>
 
                     <button
@@ -1013,7 +1055,7 @@ export function SalesPage() {
                     {saleReturnsQuery.data.map((saleReturn) => (
                       <div key={saleReturn.id} className="empty-inline-state">
                         <strong>
-                          {saleReturn.returnNumber} · ₹{Number(saleReturn.totalAmount).toFixed(2)}
+                          {saleReturn.returnNumber} · {formatMoney(saleReturn.totalAmount)}
                         </strong>
                         <p>
                           {saleReturn.returnDate}

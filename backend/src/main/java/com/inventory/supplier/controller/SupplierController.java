@@ -1,7 +1,10 @@
 package com.inventory.supplier.controller;
 
+import com.inventory.purchase.dto.PurchaseResponse;
+import com.inventory.purchase.service.PurchaseService;
 import com.inventory.supplier.dto.SupplierRequest;
 import com.inventory.supplier.dto.SupplierResponse;
+import com.inventory.supplier.dto.SupplierSummaryResponse;
 import com.inventory.supplier.service.SupplierService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -24,9 +27,11 @@ import java.util.UUID;
 public class SupplierController {
 
     private final SupplierService supplierService;
+    private final PurchaseService purchaseService;
 
-    public SupplierController(SupplierService supplierService) {
+    public SupplierController(SupplierService supplierService, PurchaseService purchaseService) {
         this.supplierService = supplierService;
+        this.purchaseService = purchaseService;
     }
 
     @PostMapping
@@ -51,6 +56,16 @@ public class SupplierController {
     @GetMapping("/{id}")
     public SupplierResponse getById(@PathVariable UUID id) {
         return supplierService.getById(id);
+    }
+
+    @GetMapping("/{id}/summary")
+    public SupplierSummaryResponse getSummary(@PathVariable UUID id) {
+        return supplierService.getSummary(id);
+    }
+
+    @GetMapping("/{id}/purchases")
+    public List<PurchaseResponse> listPurchases(@PathVariable UUID id) {
+        return purchaseService.listBySupplier(id);
     }
 
     @PatchMapping("/{id}")

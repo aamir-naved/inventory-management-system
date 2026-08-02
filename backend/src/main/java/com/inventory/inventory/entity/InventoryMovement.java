@@ -20,6 +20,7 @@ public class InventoryMovement extends TenantAwareEntity {
     public static final String TYPE_MANUAL_ADJUSTMENT = "MANUAL_ADJUSTMENT";
     public static final String TYPE_PURCHASE = "PURCHASE";
     public static final String TYPE_PURCHASE_CANCELLATION = "PURCHASE_CANCELLATION";
+    public static final String TYPE_PURCHASE_RETURN = "PURCHASE_RETURN";
     public static final String TYPE_SALE = "SALE";
     public static final String TYPE_SALE_CANCELLATION = "SALE_CANCELLATION";
     public static final String TYPE_SALE_RETURN = "SALE_RETURN";

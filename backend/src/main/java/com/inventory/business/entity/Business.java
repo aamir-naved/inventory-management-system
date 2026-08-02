@@ -5,6 +5,8 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 
+import java.math.BigDecimal;
+
 @Entity
 @Table(name = "businesses")
 public class Business extends AuditableEntity {
@@ -26,6 +28,15 @@ public class Business extends AuditableEntity {
 
     @Column(name = "time_zone", nullable = false, length = 50)
     private String timeZone;
+
+    @Column(name = "allow_negative_stock", nullable = false)
+    private boolean allowNegativeStock = false;
+
+    @Column(name = "default_low_stock_threshold", nullable = false, precision = 19, scale = 3)
+    private BigDecimal defaultLowStockThreshold = BigDecimal.ZERO;
+
+    @Column(name = "date_format", nullable = false, length = 32)
+    private String dateFormat = "dd/MM/yyyy";
 
     @Column(name = "active", nullable = false)
     private boolean active = true;
@@ -76,6 +87,30 @@ public class Business extends AuditableEntity {
 
     public void setTimeZone(String timeZone) {
         this.timeZone = timeZone;
+    }
+
+    public boolean isAllowNegativeStock() {
+        return allowNegativeStock;
+    }
+
+    public void setAllowNegativeStock(boolean allowNegativeStock) {
+        this.allowNegativeStock = allowNegativeStock;
+    }
+
+    public BigDecimal getDefaultLowStockThreshold() {
+        return defaultLowStockThreshold;
+    }
+
+    public void setDefaultLowStockThreshold(BigDecimal defaultLowStockThreshold) {
+        this.defaultLowStockThreshold = defaultLowStockThreshold;
+    }
+
+    public String getDateFormat() {
+        return dateFormat;
+    }
+
+    public void setDateFormat(String dateFormat) {
+        this.dateFormat = dateFormat;
     }
 
     public boolean isActive() {

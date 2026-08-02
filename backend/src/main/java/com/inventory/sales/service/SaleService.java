@@ -19,6 +19,7 @@ import com.inventory.sales.entity.Sale;
 import com.inventory.sales.entity.SaleItem;
 import com.inventory.sales.repository.SaleRepository;
 import com.inventory.sales.repository.SaleReturnRepository;
+import com.inventory.settings.service.SettingsService;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,7 @@ public class SaleService {
     private final ProductRepository productRepository;
     private final InventoryMovementRepository inventoryMovementRepository;
     private final PaymentService paymentService;
+    private final SettingsService settingsService;
 
     public SaleService(
         SaleRepository saleRepository,
@@ -45,7 +47,8 @@ public class SaleService {
         CustomerRepository customerRepository,
         ProductRepository productRepository,
         InventoryMovementRepository inventoryMovementRepository,
-        PaymentService paymentService
+        PaymentService paymentService,
+        SettingsService settingsService
     ) {
         this.saleRepository = saleRepository;
         this.saleReturnRepository = saleReturnRepository;
@@ -53,6 +56,7 @@ public class SaleService {
         this.productRepository = productRepository;
         this.inventoryMovementRepository = inventoryMovementRepository;
         this.paymentService = paymentService;
+        this.settingsService = settingsService;
     }
 
     public SaleResponse create(SaleRequest request) {
@@ -78,7 +82,7 @@ public class SaleService {
                 throw new IllegalArgumentException("Archived products cannot be sold");
             }
             BigDecimal after = product.getCurrentStock().subtract(itemRequest.quantity());
-            if (after.compareTo(BigDecimal.ZERO) < 0) {
+            if (after.compareTo(BigDecimal.ZERO) < 0 && !settingsService.isNegativeStockAllowed()) {
                 throw new IllegalArgumentException("Stock cannot go below zero for " + product.getName());
             }
 
@@ -134,6 +138,17 @@ public class SaleService {
     @Transactional(readOnly = true)
     public List<SaleResponse> list(String search) {
         return saleRepository.search(requireBusinessId(), normalizeSearch(search)).stream().map(this::toResponse).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<SaleResponse> listByCustomer(UUID customerId) {
+        UUID businessId = requireBusinessId();
+        customerRepository.findByIdAndBusinessId(customerId, businessId)
+            .orElseThrow(() -> new EntityNotFoundException("Customer not found"));
+        return saleRepository.findByBusinessIdAndCustomerIdOrderBySaleDateDescCreatedAtDesc(businessId, customerId)
+            .stream()
+            .map(this::toResponse)
+            .toList();
     }
 
     @Transactional(readOnly = true)

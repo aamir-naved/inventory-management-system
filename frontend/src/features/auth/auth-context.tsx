@@ -8,9 +8,13 @@ import {
 import {
   getCurrentSession,
   login as loginRequest,
+  logoutRequest,
   register as registerRequest,
+  resendVerification as resendVerificationRequest,
+  updateProfile as updateProfileRequest,
   type LoginPayload,
   type RegisterPayload,
+  type UpdateProfilePayload,
 } from "@/features/auth/auth-api";
 import {
   clearStoredAuthSession,
@@ -26,13 +30,18 @@ type AuthContextValue = {
   login: (input: LoginPayload) => Promise<void>;
   register: (input: RegisterPayload) => Promise<void>;
   updateBusinessSession: (business: { id: string; name: string }) => void;
-  logout: () => void;
+  updateProfile: (input: UpdateProfilePayload) => Promise<void>;
+  resendVerification: () => Promise<string>;
+  markEmailVerified: () => void;
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [authSession, setAuthSession] = useState<AuthSession | null>(() => readStoredAuthSession());
+  const [authSession, setAuthSession] = useState<AuthSession | null>(() =>
+    readStoredAuthSession(),
+  );
 
   async function syncSession(nextSession: AuthSession) {
     writeStoredAuthSession(nextSession);
@@ -77,9 +86,45 @@ export function AuthProvider({ children }: PropsWithChildren) {
         return nextSession;
       });
     },
-    logout: () => {
-      clearStoredAuthSession();
-      setAuthSession(null);
+    updateProfile: async (input: UpdateProfilePayload) => {
+      const nextSession = await updateProfileRequest(input);
+      writeStoredAuthSession(nextSession);
+      setAuthSession(nextSession);
+    },
+    resendVerification: async () => {
+      const response = await resendVerificationRequest();
+      return response.message;
+    },
+    markEmailVerified: () => {
+      setAuthSession((current) => {
+        if (!current) {
+          return current;
+        }
+
+        const nextSession: AuthSession = {
+          ...current,
+          user: {
+            ...current.user,
+            emailVerified: true,
+          },
+        };
+
+        writeStoredAuthSession(nextSession);
+        return nextSession;
+      });
+    },
+    logout: async () => {
+      const current = readStoredAuthSession();
+      try {
+        if (current) {
+          await logoutRequest(current.refreshToken);
+        }
+      } catch {
+        // Local sign-out should still succeed if the API call fails.
+      } finally {
+        clearStoredAuthSession();
+        setAuthSession(null);
+      }
     },
   };
 

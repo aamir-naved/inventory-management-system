@@ -44,7 +44,12 @@ app:
     header-name: X-Business-Id
   auth:
     jwt-secret: ${APP_JWT_SECRET:inventory-management-system-super-secret-key-for-development-only-2026}
-    access-token-ttl: ${APP_JWT_ACCESS_TOKEN_TTL:PT12H}
+    access-token-ttl: ${APP_JWT_ACCESS_TOKEN_TTL:PT1H}
+    refresh-token-ttl: ${APP_JWT_REFRESH_TOKEN_TTL:P14D}
+    email-verify-token-ttl: ${APP_EMAIL_VERIFY_TOKEN_TTL:PT24H}
+    password-reset-token-ttl: ${APP_PASSWORD_RESET_TOKEN_TTL:PT1H}
+    public-app-url: ${APP_PUBLIC_APP_URL:http://localhost:5173}
+    mail-from: ${APP_MAIL_FROM:noreply@inventory.local}
   cors:
     allowed-origins:
       - http://localhost:5173

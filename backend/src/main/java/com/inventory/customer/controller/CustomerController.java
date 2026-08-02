@@ -2,7 +2,10 @@ package com.inventory.customer.controller;
 
 import com.inventory.customer.dto.CustomerRequest;
 import com.inventory.customer.dto.CustomerResponse;
+import com.inventory.customer.dto.CustomerSummaryResponse;
 import com.inventory.customer.service.CustomerService;
+import com.inventory.sales.dto.SaleResponse;
+import com.inventory.sales.service.SaleService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,9 +27,11 @@ import java.util.UUID;
 public class CustomerController {
 
     private final CustomerService customerService;
+    private final SaleService saleService;
 
-    public CustomerController(CustomerService customerService) {
+    public CustomerController(CustomerService customerService, SaleService saleService) {
         this.customerService = customerService;
+        this.saleService = saleService;
     }
 
     @PostMapping
@@ -50,6 +55,16 @@ public class CustomerController {
     @GetMapping("/{id}")
     public CustomerResponse getById(@PathVariable UUID id) {
         return customerService.getById(id);
+    }
+
+    @GetMapping("/{id}/summary")
+    public CustomerSummaryResponse getSummary(@PathVariable UUID id) {
+        return customerService.getSummary(id);
+    }
+
+    @GetMapping("/{id}/sales")
+    public List<SaleResponse> listSales(@PathVariable UUID id) {
+        return saleService.listByCustomer(id);
     }
 
     @PatchMapping("/{id}")

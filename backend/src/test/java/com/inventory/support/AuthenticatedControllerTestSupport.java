@@ -45,6 +45,9 @@ public abstract class AuthenticatedControllerTestSupport {
         business.setMobileNumber("+91 9876543210");
         business.setCurrencyCode("INR");
         business.setTimeZone("Asia/Kolkata");
+        business.setAllowNegativeStock(false);
+        business.setDefaultLowStockThreshold(java.math.BigDecimal.ZERO);
+        business.setDateFormat("dd/MM/yyyy");
         business.setActive(true);
         Business savedBusiness = businessRepository.save(business);
 

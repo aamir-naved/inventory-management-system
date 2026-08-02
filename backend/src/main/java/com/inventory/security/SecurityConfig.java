@@ -37,7 +37,16 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/actuator/health", "/actuator/info", "/auth/login", "/auth/register").permitAll()
+                .requestMatchers(
+                    "/actuator/health",
+                    "/actuator/info",
+                    "/auth/login",
+                    "/auth/register",
+                    "/auth/forgot-password",
+                    "/auth/reset-password",
+                    "/auth/verify-email",
+                    "/auth/refresh"
+                ).permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

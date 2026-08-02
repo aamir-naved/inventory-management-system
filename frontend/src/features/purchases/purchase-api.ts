@@ -19,6 +19,18 @@ export type PurchaseUpdatePayload = {
   notes: string;
 };
 
+export type PurchaseItemRecord = {
+  id: string;
+  productId: string;
+  productName: string;
+  unit: string;
+  quantity: number;
+  purchasePrice: number;
+  lineTotal: number;
+  returnedQuantity: number;
+  returnableQuantity: number;
+};
+
 export type PurchaseRecord = {
   id: string;
   businessId: string;
@@ -29,16 +41,49 @@ export type PurchaseRecord = {
   paymentStatus: "PENDING" | "PARTIAL" | "PAID";
   notes: string | null;
   totalAmount: number;
+  returnedAmount: number;
+  netAmount: number;
   amountPaid: number;
   outstandingAmount: number;
   cancelled: boolean;
   cancellationReason: string | null;
+  hasReturns: boolean;
+  items: PurchaseItemRecord[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PurchaseReturnItemPayload = {
+  purchaseItemId: string;
+  quantity: number;
+};
+
+export type PurchaseReturnPayload = {
+  returnDate: string;
+  reason: string;
+  notes: string;
+  items: PurchaseReturnItemPayload[];
+};
+
+export type PurchaseReturnRecord = {
+  id: string;
+  businessId: string;
+  purchaseId: string;
+  purchaseNumber: string;
+  supplierName: string;
+  returnNumber: string;
+  returnDate: string;
+  reason: string | null;
+  notes: string | null;
+  totalAmount: number;
   items: Array<{
+    id: string;
+    purchaseItemId: string;
     productId: string;
     productName: string;
     unit: string;
     quantity: number;
-    purchasePrice: number;
+    unitCost: number;
     lineTotal: number;
   }>;
   createdAt: string;
@@ -86,5 +131,23 @@ export async function cancelPurchase(
     method: "PATCH",
     businessId,
     body: { reason },
+  });
+}
+
+export async function listPurchaseReturns(businessId: string, purchaseId: string) {
+  return httpClient<PurchaseReturnRecord[]>(`/purchases/${purchaseId}/returns`, {
+    businessId,
+  });
+}
+
+export async function createPurchaseReturn(
+  businessId: string,
+  purchaseId: string,
+  payload: PurchaseReturnPayload,
+) {
+  return httpClient<PurchaseReturnRecord>(`/purchases/${purchaseId}/returns`, {
+    method: "POST",
+    businessId,
+    body: payload,
   });
 }

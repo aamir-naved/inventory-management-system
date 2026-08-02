@@ -1,0 +1,332 @@
+package com.inventory.report.service;
+
+import com.inventory.common.tenant.TenantContext;
+import com.inventory.inventory.dto.InventoryStockResponse;
+import com.inventory.inventory.service.InventoryService;
+import com.inventory.payment.support.PaymentAmounts;
+import com.inventory.purchase.entity.Purchase;
+import com.inventory.purchase.repository.PurchaseRepository;
+import com.inventory.purchase.repository.PurchaseReturnRepository;
+import com.inventory.report.dto.CustomerOutstandingReportResponse;
+import com.inventory.report.dto.InventoryReportResponse;
+import com.inventory.report.dto.PurchaseReportResponse;
+import com.inventory.report.dto.SalesReportResponse;
+import com.inventory.report.dto.SupplierOutstandingReportResponse;
+import com.inventory.sales.entity.Sale;
+import com.inventory.sales.repository.SaleRepository;
+import com.inventory.sales.repository.SaleReturnRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+@Service
+@Transactional(readOnly = true)
+public class ReportService {
+
+    private final InventoryService inventoryService;
+    private final SaleRepository saleRepository;
+    private final PurchaseRepository purchaseRepository;
+    private final SaleReturnRepository saleReturnRepository;
+    private final PurchaseReturnRepository purchaseReturnRepository;
+
+    public ReportService(
+        InventoryService inventoryService,
+        SaleRepository saleRepository,
+        PurchaseRepository purchaseRepository,
+        SaleReturnRepository saleReturnRepository,
+        PurchaseReturnRepository purchaseReturnRepository
+    ) {
+        this.inventoryService = inventoryService;
+        this.saleRepository = saleRepository;
+        this.purchaseRepository = purchaseRepository;
+        this.saleReturnRepository = saleReturnRepository;
+        this.purchaseReturnRepository = purchaseReturnRepository;
+    }
+
+    public InventoryReportResponse inventoryReport(boolean lowStockOnly) {
+        requireBusinessId();
+        List<InventoryStockResponse> stock = inventoryService.listStock("", lowStockOnly, false);
+
+        List<InventoryReportResponse.Row> rows = stock.stream()
+            .map(item -> new InventoryReportResponse.Row(
+                item.productId(),
+                item.productName(),
+                item.sku(),
+                item.currentStock(),
+                item.costPrice(),
+                item.sellingPrice(),
+                item.stockValue(),
+                item.lowStock()
+            ))
+            .toList();
+
+        BigDecimal totalStockValue = rows.stream()
+            .map(InventoryReportResponse.Row::stockValue)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        long lowStockProducts = rows.stream().filter(InventoryReportResponse.Row::lowStock).count();
+
+        return new InventoryReportResponse(
+            OffsetDateTime.now(),
+            rows.size(),
+            totalStockValue,
+            lowStockProducts,
+            rows
+        );
+    }
+
+    public SalesReportResponse salesReport(LocalDate from, LocalDate to) {
+        UUID businessId = requireBusinessId();
+        validateDateRange(from, to);
+
+        List<Sale> sales = saleRepository.findForReport(businessId, from, to);
+        Map<UUID, BigDecimal> returnedBySaleId = returnedAmountsBySale(businessId);
+
+        List<SalesReportResponse.Row> rows = new ArrayList<>();
+        BigDecimal totalNetAmount = BigDecimal.ZERO;
+        BigDecimal totalAmountPaid = BigDecimal.ZERO;
+        BigDecimal totalOutstanding = BigDecimal.ZERO;
+
+        for (Sale sale : sales) {
+            BigDecimal returned = returnedBySaleId.getOrDefault(sale.getId(), BigDecimal.ZERO);
+            BigDecimal netAmount = sale.getTotalAmount().subtract(returned);
+            BigDecimal amountPaid = nullSafe(sale.getAmountPaid());
+            BigDecimal outstanding = PaymentAmounts.outstanding(amountPaid, netAmount);
+            String paymentStatus = PaymentAmounts.deriveStatus(amountPaid, netAmount);
+
+            rows.add(new SalesReportResponse.Row(
+                sale.getId(),
+                sale.getSaleNumber(),
+                sale.getSaleDate(),
+                sale.getCustomer().getId(),
+                sale.getCustomer().getName(),
+                netAmount,
+                amountPaid,
+                outstanding,
+                paymentStatus
+            ));
+
+            totalNetAmount = totalNetAmount.add(netAmount);
+            totalAmountPaid = totalAmountPaid.add(amountPaid);
+            totalOutstanding = totalOutstanding.add(outstanding);
+        }
+
+        return new SalesReportResponse(
+            OffsetDateTime.now(),
+            from,
+            to,
+            rows.size(),
+            totalNetAmount,
+            totalAmountPaid,
+            totalOutstanding,
+            rows
+        );
+    }
+
+    public PurchaseReportResponse purchaseReport(LocalDate from, LocalDate to) {
+        UUID businessId = requireBusinessId();
+        validateDateRange(from, to);
+
+        List<Purchase> purchases = purchaseRepository.findForReport(businessId, from, to);
+        Map<UUID, BigDecimal> returnedByPurchaseId = returnedAmountsByPurchase(businessId);
+
+        List<PurchaseReportResponse.Row> rows = new ArrayList<>();
+        BigDecimal totalAmount = BigDecimal.ZERO;
+        BigDecimal totalAmountPaid = BigDecimal.ZERO;
+        BigDecimal totalOutstanding = BigDecimal.ZERO;
+
+        for (Purchase purchase : purchases) {
+            BigDecimal returned = returnedByPurchaseId.getOrDefault(purchase.getId(), BigDecimal.ZERO);
+            BigDecimal billed = purchase.getTotalAmount().subtract(returned);
+            BigDecimal amountPaid = nullSafe(purchase.getAmountPaid());
+            BigDecimal outstanding = PaymentAmounts.outstanding(amountPaid, billed);
+            String paymentStatus = PaymentAmounts.deriveStatus(amountPaid, billed);
+
+            rows.add(new PurchaseReportResponse.Row(
+                purchase.getId(),
+                purchase.getPurchaseNumber(),
+                purchase.getPurchaseDate(),
+                purchase.getSupplier().getId(),
+                purchase.getSupplier().getName(),
+                billed,
+                amountPaid,
+                outstanding,
+                paymentStatus
+            ));
+
+            totalAmount = totalAmount.add(billed);
+            totalAmountPaid = totalAmountPaid.add(amountPaid);
+            totalOutstanding = totalOutstanding.add(outstanding);
+        }
+
+        return new PurchaseReportResponse(
+            OffsetDateTime.now(),
+            from,
+            to,
+            rows.size(),
+            totalAmount,
+            totalAmountPaid,
+            totalOutstanding,
+            rows
+        );
+    }
+
+    public CustomerOutstandingReportResponse customerOutstandingReport() {
+        UUID businessId = requireBusinessId();
+        List<Sale> sales = saleRepository.findForReport(businessId, null, null);
+        Map<UUID, BigDecimal> returnedBySaleId = returnedAmountsBySale(businessId);
+
+        Map<UUID, OutstandingAccumulator> byCustomer = new HashMap<>();
+
+        for (Sale sale : sales) {
+            BigDecimal returned = returnedBySaleId.getOrDefault(sale.getId(), BigDecimal.ZERO);
+            BigDecimal netAmount = sale.getTotalAmount().subtract(returned);
+            BigDecimal amountPaid = nullSafe(sale.getAmountPaid());
+            BigDecimal outstanding = PaymentAmounts.outstanding(amountPaid, netAmount);
+
+            if (outstanding.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+
+            UUID customerId = sale.getCustomer().getId();
+            OutstandingAccumulator accumulator = byCustomer.computeIfAbsent(
+                customerId,
+                id -> new OutstandingAccumulator(sale.getCustomer().getName())
+            );
+            accumulator.invoiceCount++;
+            accumulator.billed = accumulator.billed.add(netAmount);
+            accumulator.paid = accumulator.paid.add(amountPaid);
+            accumulator.outstanding = accumulator.outstanding.add(outstanding);
+        }
+
+        List<CustomerOutstandingReportResponse.Row> rows = byCustomer.entrySet().stream()
+            .map(entry -> new CustomerOutstandingReportResponse.Row(
+                entry.getKey(),
+                entry.getValue().name,
+                entry.getValue().invoiceCount,
+                entry.getValue().billed,
+                entry.getValue().paid,
+                entry.getValue().outstanding
+            ))
+            .sorted(Comparator.comparing(CustomerOutstandingReportResponse.Row::outstandingAmount).reversed())
+            .toList();
+
+        BigDecimal totalOutstanding = rows.stream()
+            .map(CustomerOutstandingReportResponse.Row::outstandingAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return new CustomerOutstandingReportResponse(
+            OffsetDateTime.now(),
+            rows.size(),
+            totalOutstanding,
+            rows
+        );
+    }
+
+    public SupplierOutstandingReportResponse supplierOutstandingReport() {
+        UUID businessId = requireBusinessId();
+        List<Purchase> purchases = purchaseRepository.findForReport(businessId, null, null);
+        Map<UUID, BigDecimal> returnedByPurchaseId = returnedAmountsByPurchase(businessId);
+
+        Map<UUID, OutstandingAccumulator> bySupplier = new HashMap<>();
+
+        for (Purchase purchase : purchases) {
+            BigDecimal returned = returnedByPurchaseId.getOrDefault(purchase.getId(), BigDecimal.ZERO);
+            BigDecimal billed = purchase.getTotalAmount().subtract(returned);
+            BigDecimal amountPaid = nullSafe(purchase.getAmountPaid());
+            BigDecimal outstanding = PaymentAmounts.outstanding(amountPaid, billed);
+
+            if (outstanding.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+
+            UUID supplierId = purchase.getSupplier().getId();
+            OutstandingAccumulator accumulator = bySupplier.computeIfAbsent(
+                supplierId,
+                id -> new OutstandingAccumulator(purchase.getSupplier().getName())
+            );
+            accumulator.invoiceCount++;
+            accumulator.billed = accumulator.billed.add(billed);
+            accumulator.paid = accumulator.paid.add(amountPaid);
+            accumulator.outstanding = accumulator.outstanding.add(outstanding);
+        }
+
+        List<SupplierOutstandingReportResponse.Row> rows = bySupplier.entrySet().stream()
+            .map(entry -> new SupplierOutstandingReportResponse.Row(
+                entry.getKey(),
+                entry.getValue().name,
+                entry.getValue().invoiceCount,
+                entry.getValue().billed,
+                entry.getValue().paid,
+                entry.getValue().outstanding
+            ))
+            .sorted(Comparator.comparing(SupplierOutstandingReportResponse.Row::outstandingAmount).reversed())
+            .toList();
+
+        BigDecimal totalOutstanding = rows.stream()
+            .map(SupplierOutstandingReportResponse.Row::outstandingAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return new SupplierOutstandingReportResponse(
+            OffsetDateTime.now(),
+            rows.size(),
+            totalOutstanding,
+            rows
+        );
+    }
+
+    private Map<UUID, BigDecimal> returnedAmountsBySale(UUID businessId) {
+        Map<UUID, BigDecimal> returnedBySaleId = new HashMap<>();
+        for (Object[] row : saleReturnRepository.sumReturnedAmountsGroupedBySale(businessId)) {
+            UUID saleId = (UUID) row[0];
+            BigDecimal amount = row[1] == null ? BigDecimal.ZERO : (BigDecimal) row[1];
+            returnedBySaleId.put(saleId, amount);
+        }
+        return returnedBySaleId;
+    }
+
+    private Map<UUID, BigDecimal> returnedAmountsByPurchase(UUID businessId) {
+        Map<UUID, BigDecimal> returnedByPurchaseId = new HashMap<>();
+        for (Object[] row : purchaseReturnRepository.sumReturnedAmountsGroupedByPurchase(businessId)) {
+            UUID purchaseId = (UUID) row[0];
+            BigDecimal amount = row[1] == null ? BigDecimal.ZERO : (BigDecimal) row[1];
+            returnedByPurchaseId.put(purchaseId, amount);
+        }
+        return returnedByPurchaseId;
+    }
+
+    private void validateDateRange(LocalDate from, LocalDate to) {
+        if (from != null && to != null && from.isAfter(to)) {
+            throw new IllegalArgumentException("'from' date must be on or before 'to' date");
+        }
+    }
+
+    private UUID requireBusinessId() {
+        return TenantContext.getBusinessId()
+            .orElseThrow(() -> new IllegalArgumentException("X-Business-Id header is required"));
+    }
+
+    private static BigDecimal nullSafe(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private static final class OutstandingAccumulator {
+        private final String name;
+        private long invoiceCount;
+        private BigDecimal billed = BigDecimal.ZERO;
+        private BigDecimal paid = BigDecimal.ZERO;
+        private BigDecimal outstanding = BigDecimal.ZERO;
+
+        private OutstandingAccumulator(String name) {
+            this.name = name;
+        }
+    }
+}

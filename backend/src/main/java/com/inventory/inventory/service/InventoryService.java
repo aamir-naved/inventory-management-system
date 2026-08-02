@@ -9,6 +9,7 @@ import com.inventory.inventory.entity.InventoryMovement;
 import com.inventory.inventory.repository.InventoryMovementRepository;
 import com.inventory.product.entity.Product;
 import com.inventory.product.repository.ProductRepository;
+import com.inventory.settings.service.SettingsService;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,13 +24,16 @@ public class InventoryService {
 
     private final ProductRepository productRepository;
     private final InventoryMovementRepository inventoryMovementRepository;
+    private final SettingsService settingsService;
 
     public InventoryService(
         ProductRepository productRepository,
-        InventoryMovementRepository inventoryMovementRepository
+        InventoryMovementRepository inventoryMovementRepository,
+        SettingsService settingsService
     ) {
         this.productRepository = productRepository;
         this.inventoryMovementRepository = inventoryMovementRepository;
+        this.settingsService = settingsService;
     }
 
     @Transactional(readOnly = true)
@@ -77,7 +81,7 @@ public class InventoryService {
         BigDecimal quantityBefore = product.getCurrentStock();
         BigDecimal quantityAfter = quantityBefore.add(request.adjustmentQuantity());
 
-        if (quantityAfter.compareTo(BigDecimal.ZERO) < 0) {
+        if (quantityAfter.compareTo(BigDecimal.ZERO) < 0 && !settingsService.isNegativeStockAllowed()) {
             throw new IllegalArgumentException("Stock cannot go below zero");
         }
 

@@ -16,10 +16,13 @@ public record PurchaseResponse(
     String paymentStatus,
     String notes,
     BigDecimal totalAmount,
+    BigDecimal returnedAmount,
+    BigDecimal netAmount,
     BigDecimal amountPaid,
     BigDecimal outstandingAmount,
     boolean cancelled,
     String cancellationReason,
+    boolean hasReturns,
     List<PurchaseItemResponse> items,
     OffsetDateTime createdAt,
     OffsetDateTime updatedAt

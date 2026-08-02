@@ -1,0 +1,77 @@
+package com.inventory.settings.service;
+
+import com.inventory.business.entity.Business;
+import com.inventory.business.repository.BusinessRepository;
+import com.inventory.common.tenant.TenantContext;
+import com.inventory.settings.dto.SettingsRequest;
+import com.inventory.settings.dto.SettingsResponse;
+import jakarta.persistence.EntityNotFoundException;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Set;
+import java.util.UUID;
+
+@Service
+@Transactional
+public class SettingsService {
+
+    private static final Set<String> SUPPORTED_DATE_FORMATS = Set.of(
+        "dd/MM/yyyy",
+        "MM/dd/yyyy",
+        "yyyy-MM-dd",
+        "dd-MMM-yyyy"
+    );
+
+    private final BusinessRepository businessRepository;
+
+    public SettingsService(BusinessRepository businessRepository) {
+        this.businessRepository = businessRepository;
+    }
+
+    @Transactional(readOnly = true)
+    public SettingsResponse get() {
+        return toResponse(findCurrentBusiness());
+    }
+
+    public SettingsResponse update(SettingsRequest request) {
+        Business business = findCurrentBusiness();
+        business.setCurrencyCode(request.currencyCode().trim());
+        business.setDateFormat(validateDateFormat(request.dateFormat().trim()));
+        business.setAllowNegativeStock(Boolean.TRUE.equals(request.allowNegativeStock()));
+        business.setDefaultLowStockThreshold(request.defaultLowStockThreshold());
+        return toResponse(business);
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isNegativeStockAllowed() {
+        return findCurrentBusiness().isAllowNegativeStock();
+    }
+
+    private Business findCurrentBusiness() {
+        UUID businessId = TenantContext.getBusinessId()
+            .orElseThrow(() -> new IllegalStateException("Business context is required"));
+
+        return businessRepository.findById(businessId)
+            .orElseThrow(() -> new EntityNotFoundException("Business not found"));
+    }
+
+    private String validateDateFormat(String dateFormat) {
+        if (!SUPPORTED_DATE_FORMATS.contains(dateFormat)) {
+            throw new IllegalArgumentException(
+                "Date format must be one of: dd/MM/yyyy, MM/dd/yyyy, yyyy-MM-dd, dd-MMM-yyyy"
+            );
+        }
+        return dateFormat;
+    }
+
+    private SettingsResponse toResponse(Business business) {
+        return new SettingsResponse(
+            business.getId(),
+            business.getCurrencyCode(),
+            business.getDateFormat(),
+            business.isAllowNegativeStock(),
+            business.getDefaultLowStockThreshold()
+        );
+    }
+}
