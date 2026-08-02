@@ -1,0 +1,51 @@
+spring:
+  application:
+    name: inventory-management-system
+  profiles:
+    default: dev
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/inventory_management}
+    username: ${DB_USERNAME:inventory_user}
+    password: ${DB_PASSWORD:inventory_password}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+  jackson:
+    time-zone: UTC
+
+server:
+  port: ${SERVER_PORT:8080}
+  servlet:
+    context-path: /api
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+app:
+  tenant:
+    header-name: X-Business-Id
+  auth:
+    jwt-secret: ${APP_JWT_SECRET:inventory-management-system-super-secret-key-for-development-only-2026}
+    access-token-ttl: ${APP_JWT_ACCESS_TOKEN_TTL:PT12H}
+  cors:
+    allowed-origins:
+      - http://localhost:5173
+      - http://127.0.0.1:5173

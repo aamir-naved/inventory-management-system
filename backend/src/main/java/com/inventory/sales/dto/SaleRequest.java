@@ -1,0 +1,25 @@
+package com.inventory.sales.dto;
+
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
+
+public record SaleRequest(
+    @NotNull(message = "Customer ID is required")
+    UUID customerId,
+    @NotNull(message = "Sale date is required")
+    LocalDate saleDate,
+    @DecimalMin(value = "0.00", message = "Amount paid cannot be negative")
+    BigDecimal amountPaid,
+    @Size(max = 255, message = "Notes must be 255 characters or fewer")
+    String notes,
+    @NotEmpty(message = "At least one sale item is required")
+    List<@Valid SaleItemRequest> items
+) {}

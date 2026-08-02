@@ -1,0 +1,74 @@
+package com.inventory.sales.entity;
+
+import com.inventory.common.model.TenantAwareEntity;
+import com.inventory.customer.entity.Customer;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
+@Entity
+@Table(name = "sales")
+public class Sale extends TenantAwareEntity {
+
+    @Column(name = "sale_number", nullable = false, length = 40)
+    private String saleNumber;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "customer_id", nullable = false, updatable = false)
+    private Customer customer;
+
+    @Column(name = "sale_date", nullable = false)
+    private LocalDate saleDate;
+
+    @Column(name = "payment_status", nullable = false, length = 30)
+    private String paymentStatus;
+
+    @Column(name = "notes", length = 255)
+    private String notes;
+
+    @Column(name = "total_amount", nullable = false, precision = 19, scale = 2)
+    private BigDecimal totalAmount;
+
+    @Column(name = "amount_paid", nullable = false, precision = 19, scale = 2)
+    private BigDecimal amountPaid = BigDecimal.ZERO;
+
+    @Column(name = "cancelled", nullable = false)
+    private boolean cancelled;
+
+    @Column(name = "cancellation_reason", length = 255)
+    private String cancellationReason;
+
+    @OneToMany(mappedBy = "sale", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<SaleItem> items = new ArrayList<>();
+
+    public String getSaleNumber() { return saleNumber; }
+    public void setSaleNumber(String saleNumber) { this.saleNumber = saleNumber; }
+    public Customer getCustomer() { return customer; }
+    public void setCustomer(Customer customer) { this.customer = customer; }
+    public LocalDate getSaleDate() { return saleDate; }
+    public void setSaleDate(LocalDate saleDate) { this.saleDate = saleDate; }
+    public String getPaymentStatus() { return paymentStatus; }
+    public void setPaymentStatus(String paymentStatus) { this.paymentStatus = paymentStatus; }
+    public String getNotes() { return notes; }
+    public void setNotes(String notes) { this.notes = notes; }
+    public BigDecimal getTotalAmount() { return totalAmount; }
+    public void setTotalAmount(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
+    public BigDecimal getAmountPaid() { return amountPaid; }
+    public void setAmountPaid(BigDecimal amountPaid) { this.amountPaid = amountPaid; }
+    public boolean isCancelled() { return cancelled; }
+    public void setCancelled(boolean cancelled) { this.cancelled = cancelled; }
+    public String getCancellationReason() { return cancellationReason; }
+    public void setCancellationReason(String cancellationReason) { this.cancellationReason = cancellationReason; }
+    public List<SaleItem> getItems() { return items; }
+    public void setItems(List<SaleItem> items) { this.items = items; }
+}
