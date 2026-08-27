@@ -7,6 +7,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/http-client";
+import { FieldInfo, FieldLabel } from "@/components/ui/field-label";
 import { useAuth } from "@/features/auth/auth-context";
 import { useBusinessSettings } from "@/features/settings/use-business-settings";
 import {
@@ -25,17 +26,47 @@ import {
   printSaleInvoice,
 } from "@/features/documents/document-api";
 import {
+  parseNumericDraft,
+  resolveNumericDraft,
+  type NumericDraft,
+} from "@/lib/numeric-draft";
+import {
   cancelSale,
   createSale,
   createSaleReturn,
   listSaleReturns,
   listSales,
   updateSale,
-  type SaleItemPayload,
   type SalePayload,
   type SaleRecord,
-  type SaleReturnPayload,
 } from "@/features/sales/sales-api";
+
+type SaleItemDraft = {
+  productId: string;
+  quantity: NumericDraft;
+  sellingPrice: NumericDraft;
+};
+
+type SaleFormState = {
+  customerId: string;
+  saleDate: string;
+  amountPaid: NumericDraft;
+  notes: string;
+  items: SaleItemDraft[];
+};
+
+type PaymentFormState = {
+  paymentDate: string;
+  amount: NumericDraft;
+  notes: string;
+};
+
+type ReturnFormState = {
+  returnDate: string;
+  reason: string;
+  notes: string;
+  items: Array<{ saleItemId: string; quantity: NumericDraft }>;
+};
 
 const initialCustomer: CustomerPayload = {
   name: "",
@@ -44,30 +75,48 @@ const initialCustomer: CustomerPayload = {
   addressLine: "",
 };
 
-const initialSale: SalePayload = {
+const initialSale: SaleFormState = {
   customerId: "",
   saleDate: new Date().toISOString().slice(0, 10),
-  amountPaid: 0,
+  amountPaid: "",
   notes: "",
   items: [],
 };
 
-const initialPaymentForm: PaymentPayload = {
+const initialPaymentForm: PaymentFormState = {
   paymentDate: new Date().toISOString().slice(0, 10),
-  amount: 0,
+  amount: "",
   notes: "",
 };
 
-function emptyItem(productId = "", sellingPrice = 0): SaleItemPayload {
+function emptyItem(product?: ProductRecord): SaleItemDraft {
   return {
-    productId,
-    quantity: 1,
-    sellingPrice,
+    productId: product?.id ?? "",
+    quantity: "",
+    sellingPrice: product ? Number(product.sellingPrice) : "",
   };
 }
 
-function summarizeTotal(items: SaleItemPayload[]) {
-  return items.reduce((total, item) => total + item.quantity * item.sellingPrice, 0);
+function summarizeTotal(items: SaleItemDraft[]) {
+  return items.reduce(
+    (total, item) =>
+      total + resolveNumericDraft(item.quantity) * resolveNumericDraft(item.sellingPrice),
+    0,
+  );
+}
+
+function toSalePayload(form: SaleFormState): SalePayload {
+  return {
+    customerId: form.customerId,
+    saleDate: form.saleDate,
+    amountPaid: resolveNumericDraft(form.amountPaid),
+    notes: form.notes,
+    items: form.items.map((item) => ({
+      productId: item.productId,
+      quantity: resolveNumericDraft(item.quantity),
+      sellingPrice: resolveNumericDraft(item.sellingPrice),
+    })),
+  };
 }
 
 export function SalesPage() {
@@ -76,18 +125,18 @@ export function SalesPage() {
   const businessId = session?.businessId ?? null;
   const { formatMoney, formatDate } = useBusinessSettings();
   const [customerForm, setCustomerForm] = useState<CustomerPayload>(initialCustomer);
-  const [saleForm, setSaleForm] = useState<SalePayload>(initialSale);
+  const [saleForm, setSaleForm] = useState<SaleFormState>(initialSale);
   const [saleSearch, setSaleSearch] = useState("");
   const deferredSaleSearch = useDeferredValue(saleSearch);
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null);
   const [cancellationReason, setCancellationReason] = useState("");
-  const [returnForm, setReturnForm] = useState<SaleReturnPayload>({
+  const [returnForm, setReturnForm] = useState<ReturnFormState>({
     returnDate: new Date().toISOString().slice(0, 10),
     reason: "",
     notes: "",
     items: [],
   });
-  const [paymentForm, setPaymentForm] = useState<PaymentPayload>(initialPaymentForm);
+  const [paymentForm, setPaymentForm] = useState<PaymentFormState>(initialPaymentForm);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -189,7 +238,17 @@ export function SalesPage() {
         throw new Error("Select a sale before recording a payment.");
       }
 
-      return createSalePayment(businessId, selectedSale.id, paymentForm);
+      if (paymentForm.amount === "" || resolveNumericDraft(paymentForm.amount) <= 0) {
+        throw new Error("Enter a payment amount.");
+      }
+
+      const payload: PaymentPayload = {
+        paymentDate: paymentForm.paymentDate,
+        amount: resolveNumericDraft(paymentForm.amount),
+        notes: paymentForm.notes,
+      };
+
+      return createSalePayment(businessId, selectedSale.id, payload);
     },
     onSuccess: async () => {
       setFeedback("Payment recorded.");
@@ -211,7 +270,13 @@ export function SalesPage() {
         setSelectedSale(refreshed);
       }
     },
-    onError: handleApiError,
+    onError: (error) => {
+      if (error instanceof Error && !(error instanceof ApiError)) {
+        setFeedback(error.message);
+        return;
+      }
+      handleApiError(error);
+    },
   });
 
   const cancelSaleMutation = useMutation({
@@ -243,7 +308,12 @@ export function SalesPage() {
         throw new Error("Select a sale before recording a return.");
       }
 
-      const items = returnForm.items.filter((item) => item.quantity > 0);
+      const items = returnForm.items
+        .map((item) => ({
+          saleItemId: item.saleItemId,
+          quantity: resolveNumericDraft(item.quantity),
+        }))
+        .filter((item) => item.quantity > 0);
       if (items.length === 0) {
         throw new Error("Add at least one return quantity.");
       }
@@ -299,6 +369,8 @@ export function SalesPage() {
   }
 
   const saleTotal = useMemo(() => summarizeTotal(saleForm.items), [saleForm.items]);
+  const amountPaidNow = resolveNumericDraft(saleForm.amountPaid);
+  const outstandingAfterSave = Math.max(saleTotal - amountPaidNow, 0);
 
   const returnTotal = useMemo(() => {
     if (!selectedSale) {
@@ -310,7 +382,7 @@ export function SalesPage() {
       if (!saleItem) {
         return total;
       }
-      return total + item.quantity * Number(saleItem.sellingPrice);
+      return total + resolveNumericDraft(item.quantity) * Number(saleItem.sellingPrice);
     }, 0);
   }, [returnForm.items, selectedSale]);
 
@@ -320,7 +392,7 @@ export function SalesPage() {
     setPaymentForm({
       ...initialPaymentForm,
       paymentDate: new Date().toISOString().slice(0, 10),
-      amount: Number(sale.outstandingAmount) > 0 ? Number(sale.outstandingAmount) : 0,
+      amount: Number(sale.outstandingAmount) > 0 ? Number(sale.outstandingAmount) : "",
     });
     setReturnForm({
       returnDate: new Date().toISOString().slice(0, 10),
@@ -330,14 +402,14 @@ export function SalesPage() {
         .filter((item) => Number(item.returnableQuantity) > 0)
         .map((item) => ({
           saleItemId: item.id,
-          quantity: 0,
+          quantity: "",
         })),
     });
     setFeedback(null);
     setFieldErrors({});
   }
 
-  function updateReturnQuantity(saleItemId: string, quantity: number) {
+  function updateReturnQuantity(saleItemId: string, quantity: NumericDraft) {
     setReturnForm((current) => {
       const existing = current.items.find((item) => item.saleItemId === saleItemId);
       if (!existing) {
@@ -360,11 +432,11 @@ export function SalesPage() {
     const firstProduct = productsQuery.data?.[0];
     setSaleForm((current) => ({
       ...current,
-      items: [...current.items, emptyItem(firstProduct?.id ?? "", firstProduct?.sellingPrice ?? 0)],
+      items: [...current.items, emptyItem(firstProduct)],
     }));
   }
 
-  function updateItem(index: number, nextItem: SaleItemPayload) {
+  function updateItem(index: number, nextItem: SaleItemDraft) {
     setSaleForm((current) => ({
       ...current,
       items: current.items.map((item, itemIndex) => (itemIndex === index ? nextItem : item)),
@@ -389,7 +461,25 @@ export function SalesPage() {
     event.preventDefault();
     setFieldErrors({});
     setFeedback(null);
-    await saleMutation.mutateAsync(saleForm);
+    if (saleForm.items.length === 0) {
+      setFeedback("Add at least one product to this sale.");
+      return;
+    }
+
+    const incompleteItem = saleForm.items.find(
+      (item) =>
+        !item.productId ||
+        item.quantity === "" ||
+        resolveNumericDraft(item.quantity) <= 0 ||
+        item.sellingPrice === "",
+    );
+
+    if (incompleteItem) {
+      setFeedback("Each item needs a product, quantity, and selling price.");
+      return;
+    }
+
+    await saleMutation.mutateAsync(toSalePayload(saleForm));
   }
 
   if (!businessId) {
@@ -503,14 +593,21 @@ export function SalesPage() {
           <div className="panel-heading">
             <div>
               <h3>Create sale</h3>
-              <p>Every saved sale reduces stock and records inventory movements.</p>
+              <p>
+                Record stock you sold to a customer. Saving this reduces quantity in inventory
+                and tracks how much they paid versus what they still owe.
+              </p>
             </div>
           </div>
 
           <form className="form-stack" onSubmit={handleCreateSale}>
             <div className="split-grid">
               <div className="field">
-                <label htmlFor="sale-customer">Customer</label>
+                <FieldLabel
+                  htmlFor="sale-customer"
+                  label="Customer"
+                  info="Who you sold to. Create a customer on the left if they are not listed yet."
+                />
                 <select
                   id="sale-customer"
                   value={saleForm.customerId}
@@ -529,7 +626,11 @@ export function SalesPage() {
               </div>
 
               <div className="field">
-                <label htmlFor="sale-date">Sale date</label>
+                <FieldLabel
+                  htmlFor="sale-date"
+                  label="Sale date"
+                  info="The date this sale happened."
+                />
                 <input
                   id="sale-date"
                   type="date"
@@ -543,19 +644,25 @@ export function SalesPage() {
 
             <div className="split-grid">
               <div className="field">
-                <label htmlFor="sale-amount-paid">Amount paid now</label>
+                <FieldLabel
+                  htmlFor="sale-amount-paid"
+                  label="Amount paid now"
+                  info="Cash or transfer received from the customer today. Leave blank or 0 if they will pay later — the unpaid part becomes outstanding."
+                />
                 <input
                   id="sale-amount-paid"
                   type="number"
                   min="0"
                   step="0.01"
+                  inputMode="decimal"
                   value={saleForm.amountPaid}
                   onChange={(event) =>
                     setSaleForm((current) => ({
                       ...current,
-                      amountPaid: Number(event.target.value),
+                      amountPaid: parseNumericDraft(event.target.value),
                     }))
                   }
+                  placeholder="0"
                 />
                 {fieldErrors.amountPaid ? (
                   <span className="field-error">{fieldErrors.amountPaid}</span>
@@ -563,7 +670,11 @@ export function SalesPage() {
               </div>
 
               <div className="field">
-                <label htmlFor="sale-notes">Notes</label>
+                <FieldLabel
+                  htmlFor="sale-notes"
+                  label="Notes"
+                  info="Optional reminder for this sale, such as a delivery note or counter reference."
+                />
                 <input
                   id="sale-notes"
                   value={saleForm.notes}
@@ -578,78 +689,150 @@ export function SalesPage() {
             <div className="purchase-items">
               <div className="panel-heading">
                 <div>
-                  <h3>Sale items</h3>
-                  <p>Add one or more products with quantity and selling price.</p>
+                  <div className="field-label-row">
+                    <h3>What did you sell?</h3>
+                    <FieldInfo label="Sale items">
+                      Add each product you sold. Quantity decreases stock using the product&apos;s
+                      unit (Bags, Kg, etc.). Selling price is what the customer pays per unit.
+                    </FieldInfo>
+                  </div>
+                  <p>For each line: choose the product, enter how many units, and the price per unit.</p>
                 </div>
                 <button type="button" className="ghost-button" onClick={addItem}>
                   Add item
                 </button>
               </div>
 
+              {saleForm.items.length === 0 ? (
+                <div className="empty-inline-state">
+                  <strong>No items yet</strong>
+                  <p>Click Add item, then fill product, quantity, and selling price.</p>
+                </div>
+              ) : null}
+
               {saleForm.items.map((item, index) => {
                 const product = productsQuery.data?.find((candidate) => candidate.id === item.productId);
+                const lineTotal =
+                  resolveNumericDraft(item.quantity) * resolveNumericDraft(item.sellingPrice);
 
                 return (
-                  <div key={`${item.productId}-${index}`} className="purchase-item-row">
-                    <select
-                      value={item.productId}
-                      onChange={(event) => {
-                        const nextProduct = productsQuery.data?.find(
-                          (candidate) => candidate.id === event.target.value,
-                        );
-                        updateItem(index, {
-                          ...item,
-                          productId: event.target.value,
-                          sellingPrice: nextProduct?.sellingPrice ?? item.sellingPrice,
-                        });
-                      }}
-                    >
-                      <option value="">Select product</option>
-                      {productsQuery.data?.map((productOption: ProductRecord) => (
-                        <option key={productOption.id} value={productOption.id}>
-                          {productOption.name}
-                        </option>
-                      ))}
-                    </select>
+                  <div key={`sale-item-${index}`} className="purchase-item-card">
+                    <div className="purchase-item-row purchase-item-row--compose">
+                      <div className="field">
+                        <FieldLabel
+                          htmlFor={`sale-item-product-${index}`}
+                          label="Product"
+                          info="The catalog product being sold. Stock will decrease for this product."
+                        />
+                        <select
+                          id={`sale-item-product-${index}`}
+                          value={item.productId}
+                          onChange={(event) => {
+                            const selected = productsQuery.data?.find(
+                              (candidate) => candidate.id === event.target.value,
+                            );
+                            updateItem(index, {
+                              ...item,
+                              productId: event.target.value,
+                              sellingPrice: selected
+                                ? Number(selected.sellingPrice)
+                                : item.sellingPrice,
+                            });
+                          }}
+                        >
+                          <option value="">Select product</option>
+                          {productsQuery.data?.map((productOption: ProductRecord) => (
+                            <option key={productOption.id} value={productOption.id}>
+                              {productOption.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                    <input
-                      type="number"
-                      min="0.001"
-                      step="0.001"
-                      value={item.quantity}
-                      onChange={(event) =>
-                        updateItem(index, { ...item, quantity: Number(event.target.value) })
-                      }
-                      placeholder="Qty"
-                    />
+                      <div className="field">
+                        <FieldLabel
+                          htmlFor={`sale-item-qty-${index}`}
+                          label="Quantity"
+                          info={`How many units you sold${product ? ` (in ${product.unit})` : ""}. This amount is taken from current stock.`}
+                        />
+                        <input
+                          id={`sale-item-qty-${index}`}
+                          type="number"
+                          min="0.001"
+                          step="0.001"
+                          inputMode="decimal"
+                          value={item.quantity}
+                          onChange={(event) =>
+                            updateItem(index, {
+                              ...item,
+                              quantity: parseNumericDraft(event.target.value),
+                            })
+                          }
+                          placeholder="e.g. 10"
+                        />
+                        {product ? (
+                          <span className="field-hint">
+                            Unit: {product.unit} · Stock {Number(product.currentStock).toFixed(3)}
+                          </span>
+                        ) : null}
+                      </div>
 
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={item.sellingPrice}
-                      onChange={(event) =>
-                        updateItem(index, { ...item, sellingPrice: Number(event.target.value) })
-                      }
-                      placeholder="Price"
-                    />
+                      <div className="field">
+                        <FieldLabel
+                          htmlFor={`sale-item-price-${index}`}
+                          label="Price per unit"
+                          info="What the customer pays for one unit. Line total = quantity × price per unit."
+                        />
+                        <input
+                          id={`sale-item-price-${index}`}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          inputMode="decimal"
+                          value={item.sellingPrice}
+                          onChange={(event) =>
+                            updateItem(index, {
+                              ...item,
+                              sellingPrice: parseNumericDraft(event.target.value),
+                            })
+                          }
+                          placeholder="e.g. 350"
+                        />
+                      </div>
 
-                    <span className="purchase-item-total">
-                      {formatMoney(item.quantity * item.sellingPrice)}
-                      {product ? ` · ${product.unit} · Stock ${Number(product.currentStock).toFixed(3)}` : ""}
-                    </span>
+                      <div className="field purchase-item-summary">
+                        <span className="field-label-static">Line total</span>
+                        <strong className="purchase-item-total">{formatMoney(lineTotal)}</strong>
+                      </div>
 
-                    <button type="button" className="ghost-button ghost-button--danger" onClick={() => removeItem(index)}>
-                      Remove
-                    </button>
+                      <div className="purchase-item-actions">
+                        <button
+                          type="button"
+                          className="ghost-button ghost-button--danger"
+                          onClick={() => removeItem(index)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 );
               })}
             </div>
 
-            <div className="purchase-total">
-              <strong>Total sale amount</strong>
-              <span>{formatMoney(saleTotal)}</span>
+            <div className="purchase-summary">
+              <div className="purchase-total">
+                <strong>Total sale amount</strong>
+                <span>{formatMoney(saleTotal)}</span>
+              </div>
+              <div className="purchase-total purchase-total--soft">
+                <strong>Paid now</strong>
+                <span>{formatMoney(amountPaidNow)}</span>
+              </div>
+              <div className="purchase-total">
+                <strong>Outstanding after save</strong>
+                <span>{formatMoney(outstandingAfterSave)}</span>
+              </div>
             </div>
 
             {feedback ? <p className="inline-note">{feedback}</p> : null}
@@ -860,19 +1043,25 @@ export function SalesPage() {
                       </div>
 
                       <div className="field">
-                        <label htmlFor="sale-payment-amount">Amount</label>
+                        <FieldLabel
+                          htmlFor="sale-payment-amount"
+                          label="Amount"
+                          info="How much the customer is paying now. It cannot be more than the outstanding balance."
+                        />
                         <input
                           id="sale-payment-amount"
                           type="number"
                           min="0.01"
                           step="0.01"
+                          inputMode="decimal"
                           value={paymentForm.amount}
                           onChange={(event) =>
                             setPaymentForm((current) => ({
                               ...current,
-                              amount: Number(event.target.value),
+                              amount: parseNumericDraft(event.target.value),
                             }))
                           }
+                          placeholder="0"
                         />
                       </div>
                     </div>
@@ -993,28 +1182,50 @@ export function SalesPage() {
                       .map((item) => {
                         const quantity =
                           returnForm.items.find((candidate) => candidate.saleItemId === item.id)
-                            ?.quantity ?? 0;
+                            ?.quantity ?? "";
+                        const returnQty = resolveNumericDraft(quantity);
 
                         return (
-                          <div key={item.id} className="purchase-item-row">
-                            <span>
-                              {item.productName} · up to {Number(item.returnableQuantity).toFixed(3)}{" "}
-                              {item.unit}
-                            </span>
-                            <input
-                              type="number"
-                              min="0"
-                              max={Number(item.returnableQuantity)}
-                              step="0.001"
-                              value={quantity}
-                              onChange={(event) =>
-                                updateReturnQuantity(item.id, Number(event.target.value))
-                              }
-                              placeholder="Return qty"
-                            />
-                            <span className="purchase-item-total">
-                              {formatMoney(quantity * Number(item.sellingPrice))}
-                            </span>
+                          <div key={item.id} className="purchase-item-card">
+                            <div className="purchase-item-row purchase-item-row--compose">
+                              <div className="field">
+                                <div className="field-label-row">
+                                  <span className="field-label-static">{item.productName}</span>
+                                  <FieldInfo label={item.productName}>
+                                    Return up to {Number(item.returnableQuantity).toFixed(3)} {item.unit}.
+                                    Leave blank if this line is not being returned.
+                                  </FieldInfo>
+                                </div>
+                                <span className="field-hint">
+                                  Returnable: {Number(item.returnableQuantity).toFixed(3)} {item.unit}
+                                </span>
+                              </div>
+                              <div className="field">
+                                <label htmlFor={`sale-return-qty-${item.id}`}>Quantity</label>
+                                <input
+                                  id={`sale-return-qty-${item.id}`}
+                                  type="number"
+                                  min="0"
+                                  max={Number(item.returnableQuantity)}
+                                  step="0.001"
+                                  inputMode="decimal"
+                                  value={quantity}
+                                  onChange={(event) =>
+                                    updateReturnQuantity(
+                                      item.id,
+                                      parseNumericDraft(event.target.value),
+                                    )
+                                  }
+                                  placeholder="0"
+                                />
+                              </div>
+                              <div className="field purchase-item-summary">
+                                <span className="field-label-static">Line total</span>
+                                <strong className="purchase-item-total">
+                                  {formatMoney(returnQty * Number(item.sellingPrice))}
+                                </strong>
+                              </div>
+                            </div>
                           </div>
                         );
                       })}

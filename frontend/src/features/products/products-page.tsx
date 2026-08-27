@@ -7,7 +7,13 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/http-client";
+import { FieldLabel } from "@/components/ui/field-label";
 import { useAuth } from "@/features/auth/auth-context";
+import {
+  parseNumericDraft,
+  resolveNumericDraft,
+  type NumericDraft,
+} from "@/lib/numeric-draft";
 import {
   archiveProduct,
   createProduct,
@@ -18,18 +24,48 @@ import {
 } from "@/features/products/product-api";
 import { useBusinessSettings } from "@/features/settings/use-business-settings";
 
-const initialForm: ProductPayload = {
+const COMMON_UNITS = [
+  "Pieces",
+  "Bags",
+  "Kg",
+  "Grams",
+  "Liters",
+  "Ml",
+  "Boxes",
+  "Packs",
+  "Tons",
+  "Meters",
+  "Rolls",
+  "Dozen",
+] as const;
+
+type ProductFormState = {
+  name: string;
+  sku: string;
+  category: string;
+  unit: string;
+  costPrice: NumericDraft;
+  sellingPrice: NumericDraft;
+  openingStock: NumericDraft;
+  lowStockThreshold: NumericDraft;
+};
+
+const initialForm: ProductFormState = {
   name: "",
   sku: "",
   category: "",
   unit: "Pieces",
-  costPrice: 0,
-  sellingPrice: 0,
-  openingStock: 0,
-  lowStockThreshold: 0,
+  costPrice: "",
+  sellingPrice: "",
+  openingStock: "",
+  lowStockThreshold: "",
 };
 
-function toPayload(product: ProductRecord): ProductPayload {
+function isCommonUnit(unit: string): unit is (typeof COMMON_UNITS)[number] {
+  return (COMMON_UNITS as readonly string[]).includes(unit);
+}
+
+function toFormState(product: ProductRecord): ProductFormState {
   return {
     name: product.name,
     sku: product.sku ?? "",
@@ -42,6 +78,19 @@ function toPayload(product: ProductRecord): ProductPayload {
   };
 }
 
+function toPayload(form: ProductFormState): ProductPayload {
+  return {
+    name: form.name,
+    sku: form.sku,
+    category: form.category,
+    unit: form.unit.trim() || "Pieces",
+    costPrice: resolveNumericDraft(form.costPrice),
+    sellingPrice: resolveNumericDraft(form.sellingPrice),
+    openingStock: resolveNumericDraft(form.openingStock),
+    lowStockThreshold: resolveNumericDraft(form.lowStockThreshold),
+  };
+}
+
 export function ProductsPage() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
@@ -51,14 +100,16 @@ export function ProductsPage() {
   const deferredSearch = useDeferredValue(search);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductRecord | null>(null);
-  const [form, setForm] = useState<ProductPayload>(initialForm);
+  const [form, setForm] = useState<ProductFormState>(initialForm);
+  const [unitMode, setUnitMode] = useState<"preset" | "other">("preset");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  function blankForm(): ProductPayload {
+  function blankForm(): ProductFormState {
     return {
       ...initialForm,
-      lowStockThreshold: defaultLowStockThreshold,
+      lowStockThreshold:
+        defaultLowStockThreshold > 0 ? defaultLowStockThreshold : "",
     };
   }
 
@@ -76,10 +127,13 @@ export function ProductsPage() {
   useEffect(() => {
     if (!selectedProduct) {
       setForm(blankForm());
+      setUnitMode("preset");
       return;
     }
 
-    setForm(toPayload(selectedProduct));
+    const nextForm = toFormState(selectedProduct);
+    setForm(nextForm);
+    setUnitMode(isCommonUnit(nextForm.unit) ? "preset" : "other");
   }, [selectedProduct, defaultLowStockThreshold]);
 
   const saveMutation = useMutation({
@@ -136,23 +190,44 @@ export function ProductsPage() {
     },
   });
 
-  function updateField<K extends keyof ProductPayload>(key: K, value: ProductPayload[K]) {
+  function updateField<K extends keyof ProductFormState>(key: K, value: ProductFormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function handleUnitSelect(value: string) {
+    if (value === "Other") {
+      setUnitMode("other");
+      updateField("unit", isCommonUnit(form.unit) ? "" : form.unit);
+      return;
+    }
+
+    setUnitMode("preset");
+    updateField("unit", value);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFeedback(null);
     setFieldErrors({});
-    await saveMutation.mutateAsync(form);
+
+    if (!form.unit.trim()) {
+      setFieldErrors({ unit: "Unit is required." });
+      setFeedback("Choose a unit or enter a custom one.");
+      return;
+    }
+
+    await saveMutation.mutateAsync(toPayload(form));
   }
 
   function resetForm() {
     setSelectedProduct(null);
     setForm(blankForm());
+    setUnitMode("preset");
     setFieldErrors({});
     setFeedback(null);
   }
+
+  const unitSelectValue = unitMode === "other" || !isCommonUnit(form.unit) ? "Other" : form.unit;
 
   if (!businessId) {
     return (
@@ -193,7 +268,11 @@ export function ProductsPage() {
 
           <form className="form-stack" onSubmit={handleSubmit}>
             <div className="field">
-              <label htmlFor="product-name">Product name</label>
+              <FieldLabel
+                htmlFor="product-name"
+                label="Product name"
+                info="The display name shown in catalog, purchases, sales, and inventory."
+              />
               <input
                 id="product-name"
                 value={form.name}
@@ -205,7 +284,11 @@ export function ProductsPage() {
 
             <div className="split-grid">
               <div className="field">
-                <label htmlFor="product-sku">SKU</label>
+                <FieldLabel
+                  htmlFor="product-sku"
+                  label="SKU"
+                  info="Optional stock-keeping code for quick search and identification (for example CEM-001)."
+                />
                 <input
                   id="product-sku"
                   value={form.sku}
@@ -216,7 +299,11 @@ export function ProductsPage() {
               </div>
 
               <div className="field">
-                <label htmlFor="product-category">Category</label>
+                <FieldLabel
+                  htmlFor="product-category"
+                  label="Category"
+                  info="Optional group used for filtering, such as Cement, Steel, or Hardware."
+                />
                 <input
                   id="product-category"
                   value={form.category}
@@ -231,25 +318,52 @@ export function ProductsPage() {
 
             <div className="split-grid">
               <div className="field">
-                <label htmlFor="product-unit">Unit</label>
-                <input
-                  id="product-unit"
-                  value={form.unit}
-                  onChange={(event) => updateField("unit", event.target.value)}
-                  placeholder="Bags"
+                <FieldLabel
+                  htmlFor="product-unit"
+                  label="Unit"
+                  info="How this product is measured when stocking, buying, or selling — Bags, Kg, Pieces, and so on."
                 />
+                <select
+                  id="product-unit"
+                  value={unitSelectValue}
+                  onChange={(event) => handleUnitSelect(event.target.value)}
+                >
+                  {COMMON_UNITS.map((unit) => (
+                    <option key={unit} value={unit}>
+                      {unit}
+                    </option>
+                  ))}
+                  <option value="Other">Other</option>
+                </select>
+                {unitSelectValue === "Other" ? (
+                  <input
+                    id="product-unit-custom"
+                    value={form.unit}
+                    onChange={(event) => updateField("unit", event.target.value)}
+                    placeholder="Enter custom unit"
+                    aria-label="Custom unit"
+                  />
+                ) : null}
                 {fieldErrors.unit ? <span className="field-error">{fieldErrors.unit}</span> : null}
               </div>
 
               <div className="field">
-                <label htmlFor="product-opening-stock">Opening stock</label>
+                <FieldLabel
+                  htmlFor="product-opening-stock"
+                  label="Opening stock"
+                  info="Quantity you already have on hand. On create, this becomes the product's starting current stock. Leave blank or 0 if you have none yet."
+                />
                 <input
                   id="product-opening-stock"
                   type="number"
                   min="0"
                   step="0.001"
+                  inputMode="decimal"
                   value={form.openingStock}
-                  onChange={(event) => updateField("openingStock", Number(event.target.value))}
+                  onChange={(event) =>
+                    updateField("openingStock", parseNumericDraft(event.target.value))
+                  }
+                  placeholder="0"
                 />
                 {fieldErrors.openingStock ? (
                   <span className="field-error">{fieldErrors.openingStock}</span>
@@ -259,14 +373,22 @@ export function ProductsPage() {
 
             <div className="split-grid">
               <div className="field">
-                <label htmlFor="product-low-stock-threshold">Low stock threshold</label>
+                <FieldLabel
+                  htmlFor="product-low-stock-threshold"
+                  label="Low stock threshold"
+                  info="When current stock reaches this level, the product is treated as low stock so you can reorder in time."
+                />
                 <input
                   id="product-low-stock-threshold"
                   type="number"
                   min="0"
                   step="0.001"
+                  inputMode="decimal"
                   value={form.lowStockThreshold}
-                  onChange={(event) => updateField("lowStockThreshold", Number(event.target.value))}
+                  onChange={(event) =>
+                    updateField("lowStockThreshold", parseNumericDraft(event.target.value))
+                  }
+                  placeholder="0"
                 />
                 {fieldErrors.lowStockThreshold ? (
                   <span className="field-error">{fieldErrors.lowStockThreshold}</span>
@@ -274,14 +396,22 @@ export function ProductsPage() {
               </div>
 
               <div className="field">
-                <label htmlFor="product-cost-price">Cost price</label>
+                <FieldLabel
+                  htmlFor="product-cost-price"
+                  label="Cost price"
+                  info="What you typically pay per unit when purchasing this product."
+                />
                 <input
                   id="product-cost-price"
                   type="number"
                   min="0"
                   step="0.01"
+                  inputMode="decimal"
                   value={form.costPrice}
-                  onChange={(event) => updateField("costPrice", Number(event.target.value))}
+                  onChange={(event) =>
+                    updateField("costPrice", parseNumericDraft(event.target.value))
+                  }
+                  placeholder="0"
                 />
                 {fieldErrors.costPrice ? (
                   <span className="field-error">{fieldErrors.costPrice}</span>
@@ -289,14 +419,22 @@ export function ProductsPage() {
               </div>
 
               <div className="field">
-                <label htmlFor="product-selling-price">Selling price</label>
+                <FieldLabel
+                  htmlFor="product-selling-price"
+                  label="Selling price"
+                  info="What you typically charge customers per unit when selling this product."
+                />
                 <input
                   id="product-selling-price"
                   type="number"
                   min="0"
                   step="0.01"
+                  inputMode="decimal"
                   value={form.sellingPrice}
-                  onChange={(event) => updateField("sellingPrice", Number(event.target.value))}
+                  onChange={(event) =>
+                    updateField("sellingPrice", parseNumericDraft(event.target.value))
+                  }
+                  placeholder="0"
                 />
                 {fieldErrors.sellingPrice ? (
                   <span className="field-error">{fieldErrors.sellingPrice}</span>

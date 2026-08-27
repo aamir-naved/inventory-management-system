@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/http-client";
+import { FieldLabel } from "@/components/ui/field-label";
 import { useAuth } from "@/features/auth/auth-context";
 import { formatDate, formatMoney } from "@/features/settings/format";
 import {
@@ -11,19 +12,31 @@ import {
   updateSettings,
   type SettingsPayload,
 } from "@/features/settings/settings-api";
+import {
+  parseNumericDraft,
+  resolveNumericDraft,
+  type NumericDraft,
+} from "@/lib/numeric-draft";
 
-const initialForm: SettingsPayload = {
+type SettingsFormState = {
+  currencyCode: string;
+  dateFormat: string;
+  allowNegativeStock: boolean;
+  defaultLowStockThreshold: NumericDraft;
+};
+
+const initialForm: SettingsFormState = {
   currencyCode: "INR",
   dateFormat: "dd/MM/yyyy",
   allowNegativeStock: false,
-  defaultLowStockThreshold: 0,
+  defaultLowStockThreshold: "",
 };
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const businessId = session?.businessId ?? null;
-  const [form, setForm] = useState<SettingsPayload>(initialForm);
+  const [form, setForm] = useState<SettingsFormState>(initialForm);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackTone, setFeedbackTone] = useState<"error" | "success">("error");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -40,9 +53,7 @@ export function SettingsPage() {
         currencyCode: settingsQuery.data.currencyCode,
         dateFormat: settingsQuery.data.dateFormat,
         allowNegativeStock: settingsQuery.data.allowNegativeStock,
-        defaultLowStockThreshold: Number(
-          settingsQuery.data.defaultLowStockThreshold,
-        ),
+        defaultLowStockThreshold: Number(settingsQuery.data.defaultLowStockThreshold),
       });
     }
   }, [settingsQuery.data]);
@@ -71,9 +82,9 @@ export function SettingsPage() {
     },
   });
 
-  function updateField<K extends keyof SettingsPayload>(
+  function updateField<K extends keyof SettingsFormState>(
     key: K,
-    value: SettingsPayload[K],
+    value: SettingsFormState[K],
   ) {
     setForm((current) => ({ ...current, [key]: value }));
   }
@@ -83,8 +94,10 @@ export function SettingsPage() {
     setFeedback(null);
     setFieldErrors({});
     await saveMutation.mutateAsync({
-      ...form,
       currencyCode: form.currencyCode.trim().toUpperCase(),
+      dateFormat: form.dateFormat,
+      allowNegativeStock: form.allowNegativeStock,
+      defaultLowStockThreshold: resolveNumericDraft(form.defaultLowStockThreshold),
     });
   }
 
@@ -123,7 +136,11 @@ export function SettingsPage() {
         ) : (
           <form className="form-stack" onSubmit={handleSubmit}>
             <div className="field">
-              <label htmlFor="currencyCode">Currency</label>
+              <FieldLabel
+                htmlFor="currencyCode"
+                label="Currency"
+                info="3-letter currency code used for money across the app, such as INR or USD."
+              />
               <input
                 id="currencyCode"
                 value={form.currencyCode}
@@ -143,7 +160,11 @@ export function SettingsPage() {
             </div>
 
             <div className="field">
-              <label htmlFor="dateFormat">Date format</label>
+              <FieldLabel
+                htmlFor="dateFormat"
+                label="Date format"
+                info="How dates appear on sales, purchases, invoices, and reports."
+              />
               <select
                 id="dateFormat"
                 value={form.dateFormat}
@@ -165,21 +186,25 @@ export function SettingsPage() {
             </div>
 
             <div className="field">
-              <label htmlFor="defaultLowStockThreshold">
-                Default low-stock threshold
-              </label>
+              <FieldLabel
+                htmlFor="defaultLowStockThreshold"
+                label="Default low-stock threshold"
+                info="Starting low-stock value for new products. When stock reaches this level, the product is flagged so you can reorder."
+              />
               <input
                 id="defaultLowStockThreshold"
                 type="number"
                 min="0"
                 step="0.001"
+                inputMode="decimal"
                 value={form.defaultLowStockThreshold}
                 onChange={(event) =>
                   updateField(
                     "defaultLowStockThreshold",
-                    Number(event.target.value),
+                    parseNumericDraft(event.target.value),
                   )
                 }
+                placeholder="0"
               />
               {fieldErrors.defaultLowStockThreshold ? (
                 <span className="field-error">

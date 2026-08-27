@@ -7,8 +7,14 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/http-client";
+import { FieldInfo, FieldLabel } from "@/components/ui/field-label";
 import { useAuth } from "@/features/auth/auth-context";
 import { useBusinessSettings } from "@/features/settings/use-business-settings";
+import {
+  parseNumericDraft,
+  resolveNumericDraft,
+  type NumericDraft,
+} from "@/lib/numeric-draft";
 import {
   createPurchasePayment,
   listPurchasePayments,
@@ -25,10 +31,8 @@ import {
   listPurchaseReturns,
   listPurchases,
   updatePurchase,
-  type PurchaseItemPayload,
   type PurchasePayload,
   type PurchaseRecord,
-  type PurchaseReturnPayload,
 } from "@/features/purchases/purchase-api";
 import {
   createSupplier,
@@ -37,6 +41,20 @@ import {
 } from "@/features/suppliers/supplier-api";
 import { listProducts, type ProductRecord } from "@/features/products/product-api";
 
+type PurchaseItemDraft = {
+  productId: string;
+  quantity: NumericDraft;
+  purchasePrice: NumericDraft;
+};
+
+type PurchaseFormState = {
+  supplierId: string;
+  purchaseDate: string;
+  amountPaid: NumericDraft;
+  notes: string;
+  items: PurchaseItemDraft[];
+};
+
 const initialSupplier: SupplierPayload = {
   name: "",
   contactPerson: "",
@@ -44,30 +62,61 @@ const initialSupplier: SupplierPayload = {
   addressLine: "",
 };
 
-const initialPurchase: PurchasePayload = {
+const initialPurchase: PurchaseFormState = {
   supplierId: "",
   purchaseDate: new Date().toISOString().slice(0, 10),
-  amountPaid: 0,
+  amountPaid: "",
   notes: "",
   items: [],
 };
 
-const initialPaymentForm: PaymentPayload = {
+type PaymentFormState = {
+  paymentDate: string;
+  amount: NumericDraft;
+  notes: string;
+};
+
+type ReturnFormState = {
+  returnDate: string;
+  reason: string;
+  notes: string;
+  items: Array<{ purchaseItemId: string; quantity: NumericDraft }>;
+};
+
+const initialPaymentForm: PaymentFormState = {
   paymentDate: new Date().toISOString().slice(0, 10),
-  amount: 0,
+  amount: "",
   notes: "",
 };
 
-function emptyItem(productId = ""): PurchaseItemPayload {
+function emptyItem(product?: ProductRecord): PurchaseItemDraft {
   return {
-    productId,
-    quantity: 1,
-    purchasePrice: 0,
+    productId: product?.id ?? "",
+    quantity: "",
+    purchasePrice: product ? Number(product.costPrice) : "",
   };
 }
 
-function summarizeTotal(items: PurchaseItemPayload[]) {
-  return items.reduce((total, item) => total + item.quantity * item.purchasePrice, 0);
+function summarizeTotal(items: PurchaseItemDraft[]) {
+  return items.reduce(
+    (total, item) =>
+      total + resolveNumericDraft(item.quantity) * resolveNumericDraft(item.purchasePrice),
+    0,
+  );
+}
+
+function toPurchasePayload(form: PurchaseFormState): PurchasePayload {
+  return {
+    supplierId: form.supplierId,
+    purchaseDate: form.purchaseDate,
+    amountPaid: resolveNumericDraft(form.amountPaid),
+    notes: form.notes,
+    items: form.items.map((item) => ({
+      productId: item.productId,
+      quantity: resolveNumericDraft(item.quantity),
+      purchasePrice: resolveNumericDraft(item.purchasePrice),
+    })),
+  };
 }
 
 export function PurchasesPage() {
@@ -76,18 +125,18 @@ export function PurchasesPage() {
   const businessId = session?.businessId ?? null;
   const { formatMoney, formatDate } = useBusinessSettings();
   const [supplierForm, setSupplierForm] = useState<SupplierPayload>(initialSupplier);
-  const [purchaseForm, setPurchaseForm] = useState<PurchasePayload>(initialPurchase);
+  const [purchaseForm, setPurchaseForm] = useState<PurchaseFormState>(initialPurchase);
   const [purchaseSearch, setPurchaseSearch] = useState("");
   const deferredPurchaseSearch = useDeferredValue(purchaseSearch);
   const [selectedPurchase, setSelectedPurchase] = useState<PurchaseRecord | null>(null);
   const [cancellationReason, setCancellationReason] = useState("");
-  const [returnForm, setReturnForm] = useState<PurchaseReturnPayload>({
+  const [returnForm, setReturnForm] = useState<ReturnFormState>({
     returnDate: new Date().toISOString().slice(0, 10),
     reason: "",
     notes: "",
     items: [],
   });
-  const [paymentForm, setPaymentForm] = useState<PaymentPayload>(initialPaymentForm);
+  const [paymentForm, setPaymentForm] = useState<PaymentFormState>(initialPaymentForm);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -147,7 +196,7 @@ export function PurchasesPage() {
       return createPurchase(businessId, payload);
     },
     onSuccess: async (purchase) => {
-      setFeedback("Purchase recorded and stock increased.");
+      setFeedback("Purchase recorded. Stock increased for the products you bought.");
       setSelectedPurchase(purchase);
       setPurchaseForm({
         ...initialPurchase,
@@ -188,7 +237,17 @@ export function PurchasesPage() {
         throw new Error("Select a purchase before recording a payment.");
       }
 
-      return createPurchasePayment(businessId, selectedPurchase.id, paymentForm);
+      if (paymentForm.amount === "" || resolveNumericDraft(paymentForm.amount) <= 0) {
+        throw new Error("Enter a payment amount.");
+      }
+
+      const payload: PaymentPayload = {
+        paymentDate: paymentForm.paymentDate,
+        amount: resolveNumericDraft(paymentForm.amount),
+        notes: paymentForm.notes,
+      };
+
+      return createPurchasePayment(businessId, selectedPurchase.id, payload);
     },
     onSuccess: async () => {
       setFeedback("Payment recorded.");
@@ -210,7 +269,13 @@ export function PurchasesPage() {
         setSelectedPurchase(refreshed);
       }
     },
-    onError: handleApiError,
+    onError: (error) => {
+      if (error instanceof Error && !(error instanceof ApiError)) {
+        setFeedback(error.message);
+        return;
+      }
+      handleApiError(error);
+    },
   });
 
   const cancelPurchaseMutation = useMutation({
@@ -241,7 +306,12 @@ export function PurchasesPage() {
         throw new Error("Select a purchase before recording a return.");
       }
 
-      const items = returnForm.items.filter((item) => item.quantity > 0);
+      const items = returnForm.items
+        .map((item) => ({
+          purchaseItemId: item.purchaseItemId,
+          quantity: resolveNumericDraft(item.quantity),
+        }))
+        .filter((item) => item.quantity > 0);
       if (items.length === 0) {
         throw new Error("Add at least one return quantity.");
       }
@@ -297,6 +367,8 @@ export function PurchasesPage() {
   }
 
   const purchaseTotal = useMemo(() => summarizeTotal(purchaseForm.items), [purchaseForm.items]);
+  const amountPaidNow = resolveNumericDraft(purchaseForm.amountPaid);
+  const outstandingAfterSave = Math.max(purchaseTotal - amountPaidNow, 0);
 
   const returnTotal = useMemo(() => {
     if (!selectedPurchase) {
@@ -310,7 +382,7 @@ export function PurchasesPage() {
       if (!purchaseItem) {
         return total;
       }
-      return total + item.quantity * Number(purchaseItem.purchasePrice);
+      return total + resolveNumericDraft(item.quantity) * Number(purchaseItem.purchasePrice);
     }, 0);
   }, [returnForm.items, selectedPurchase]);
 
@@ -320,7 +392,8 @@ export function PurchasesPage() {
     setPaymentForm({
       ...initialPaymentForm,
       paymentDate: new Date().toISOString().slice(0, 10),
-      amount: Number(purchase.outstandingAmount) > 0 ? Number(purchase.outstandingAmount) : 0,
+      amount:
+        Number(purchase.outstandingAmount) > 0 ? Number(purchase.outstandingAmount) : "",
     });
     setReturnForm({
       returnDate: new Date().toISOString().slice(0, 10),
@@ -330,14 +403,14 @@ export function PurchasesPage() {
         .filter((item) => Number(item.returnableQuantity) > 0)
         .map((item) => ({
           purchaseItemId: item.id,
-          quantity: 0,
+          quantity: "",
         })),
     });
     setFeedback(null);
     setFieldErrors({});
   }
 
-  function updateReturnQuantity(purchaseItemId: string, quantity: number) {
+  function updateReturnQuantity(purchaseItemId: string, quantity: NumericDraft) {
     setReturnForm((current) => {
       const existing = current.items.find((item) => item.purchaseItemId === purchaseItemId);
       if (!existing) {
@@ -357,14 +430,14 @@ export function PurchasesPage() {
   }
 
   function addItem() {
-    const firstProductId = productsQuery.data?.[0]?.id ?? "";
+    const firstProduct = productsQuery.data?.[0];
     setPurchaseForm((current) => ({
       ...current,
-      items: [...current.items, emptyItem(firstProductId)],
+      items: [...current.items, emptyItem(firstProduct)],
     }));
   }
 
-  function updateItem(index: number, nextItem: PurchaseItemPayload) {
+  function updateItem(index: number, nextItem: PurchaseItemDraft) {
     setPurchaseForm((current) => ({
       ...current,
       items: current.items.map((item, itemIndex) => (itemIndex === index ? nextItem : item)),
@@ -389,7 +462,26 @@ export function PurchasesPage() {
     event.preventDefault();
     setFieldErrors({});
     setFeedback(null);
-    await purchaseMutation.mutateAsync(purchaseForm);
+
+    if (purchaseForm.items.length === 0) {
+      setFeedback("Add at least one product to this purchase.");
+      return;
+    }
+
+    const incompleteItem = purchaseForm.items.find(
+      (item) =>
+        !item.productId ||
+        item.quantity === "" ||
+        resolveNumericDraft(item.quantity) <= 0 ||
+        item.purchasePrice === "",
+    );
+
+    if (incompleteItem) {
+      setFeedback("Each item needs a product, quantity, and purchase price.");
+      return;
+    }
+
+    await purchaseMutation.mutateAsync(toPurchasePayload(purchaseForm));
   }
 
   if (!businessId) {
@@ -503,14 +595,21 @@ export function PurchasesPage() {
           <div className="panel-heading">
             <div>
               <h3>Create purchase</h3>
-              <p>Every saved purchase increases stock and records inventory movements.</p>
+              <p>
+                Record stock you bought from a supplier. Saving this adds quantity to inventory
+                and tracks how much you paid versus what you still owe.
+              </p>
             </div>
           </div>
 
           <form className="form-stack" onSubmit={handleCreatePurchase}>
             <div className="split-grid">
               <div className="field">
-                <label htmlFor="purchase-supplier">Supplier</label>
+                <FieldLabel
+                  htmlFor="purchase-supplier"
+                  label="Supplier"
+                  info="Who you bought from. Create a supplier on the left if they are not listed yet."
+                />
                 <select
                   id="purchase-supplier"
                   value={purchaseForm.supplierId}
@@ -529,7 +628,11 @@ export function PurchasesPage() {
               </div>
 
               <div className="field">
-                <label htmlFor="purchase-date">Purchase date</label>
+                <FieldLabel
+                  htmlFor="purchase-date"
+                  label="Purchase date"
+                  info="The date this stock was purchased or received."
+                />
                 <input
                   id="purchase-date"
                   type="date"
@@ -543,19 +646,25 @@ export function PurchasesPage() {
 
             <div className="split-grid">
               <div className="field">
-                <label htmlFor="purchase-amount-paid">Amount paid now</label>
+                <FieldLabel
+                  htmlFor="purchase-amount-paid"
+                  label="Amount paid now"
+                  info="Cash or transfer paid to the supplier today. Leave blank or 0 if you will pay later — the unpaid part becomes outstanding."
+                />
                 <input
                   id="purchase-amount-paid"
                   type="number"
                   min="0"
                   step="0.01"
+                  inputMode="decimal"
                   value={purchaseForm.amountPaid}
                   onChange={(event) =>
                     setPurchaseForm((current) => ({
                       ...current,
-                      amountPaid: Number(event.target.value),
+                      amountPaid: parseNumericDraft(event.target.value),
                     }))
                   }
+                  placeholder="0"
                 />
                 {fieldErrors.amountPaid ? (
                   <span className="field-error">{fieldErrors.amountPaid}</span>
@@ -563,7 +672,11 @@ export function PurchasesPage() {
               </div>
 
               <div className="field">
-                <label htmlFor="purchase-notes">Notes</label>
+                <FieldLabel
+                  htmlFor="purchase-notes"
+                  label="Notes"
+                  info="Optional reminder for this purchase, such as invoice number or delivery reference."
+                />
                 <input
                   id="purchase-notes"
                   value={purchaseForm.notes}
@@ -578,76 +691,148 @@ export function PurchasesPage() {
             <div className="purchase-items">
               <div className="panel-heading">
                 <div>
-                  <h3>Purchase items</h3>
-                  <p>Add one or more products with quantity and purchase price.</p>
+                  <div className="field-label-row">
+                    <h3>What did you buy?</h3>
+                    <FieldInfo label="Purchase items">
+                      Add each product you received. Quantity increases stock using the product&apos;s
+                      unit (Bags, Kg, etc.). Purchase price is what you paid per unit.
+                    </FieldInfo>
+                  </div>
+                  <p>For each line: choose the product, enter how many units, and the price per unit.</p>
                 </div>
                 <button type="button" className="ghost-button" onClick={addItem}>
                   Add item
                 </button>
               </div>
 
+              {purchaseForm.items.length === 0 ? (
+                <div className="empty-inline-state">
+                  <strong>No items yet</strong>
+                  <p>Click Add item, then fill product, quantity, and purchase price.</p>
+                </div>
+              ) : null}
+
               {purchaseForm.items.map((item, index) => {
                 const product = productsQuery.data?.find((candidate) => candidate.id === item.productId);
+                const lineTotal =
+                  resolveNumericDraft(item.quantity) * resolveNumericDraft(item.purchasePrice);
 
                 return (
-                  <div key={`${item.productId}-${index}`} className="purchase-item-row">
-                    <select
-                      value={item.productId}
-                      onChange={(event) =>
-                        updateItem(index, {
-                          ...item,
-                          productId: event.target.value,
-                          purchasePrice:
-                            productsQuery.data?.find((candidate) => candidate.id === event.target.value)?.costPrice ?? item.purchasePrice,
-                        })
-                      }
-                    >
-                      <option value="">Select product</option>
-                      {productsQuery.data?.map((productOption: ProductRecord) => (
-                        <option key={productOption.id} value={productOption.id}>
-                          {productOption.name}
-                        </option>
-                      ))}
-                    </select>
+                  <div key={`purchase-item-${index}`} className="purchase-item-card">
+                    <div className="purchase-item-row purchase-item-row--compose">
+                      <div className="field">
+                        <FieldLabel
+                          htmlFor={`purchase-item-product-${index}`}
+                          label="Product"
+                          info="The catalog product receiving this stock. Stock will increase for this product."
+                        />
+                        <select
+                          id={`purchase-item-product-${index}`}
+                          value={item.productId}
+                          onChange={(event) => {
+                            const selected = productsQuery.data?.find(
+                              (candidate) => candidate.id === event.target.value,
+                            );
+                            updateItem(index, {
+                              ...item,
+                              productId: event.target.value,
+                              purchasePrice: selected
+                                ? Number(selected.costPrice)
+                                : item.purchasePrice,
+                            });
+                          }}
+                        >
+                          <option value="">Select product</option>
+                          {productsQuery.data?.map((productOption: ProductRecord) => (
+                            <option key={productOption.id} value={productOption.id}>
+                              {productOption.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                    <input
-                      type="number"
-                      min="0.001"
-                      step="0.001"
-                      value={item.quantity}
-                      onChange={(event) =>
-                        updateItem(index, { ...item, quantity: Number(event.target.value) })
-                      }
-                      placeholder="Qty"
-                    />
+                      <div className="field">
+                        <FieldLabel
+                          htmlFor={`purchase-item-qty-${index}`}
+                          label="Quantity"
+                          info={`How many units you received${product ? ` (in ${product.unit})` : ""}. This amount is added to current stock.`}
+                        />
+                        <input
+                          id={`purchase-item-qty-${index}`}
+                          type="number"
+                          min="0.001"
+                          step="0.001"
+                          inputMode="decimal"
+                          value={item.quantity}
+                          onChange={(event) =>
+                            updateItem(index, {
+                              ...item,
+                              quantity: parseNumericDraft(event.target.value),
+                            })
+                          }
+                          placeholder="e.g. 50"
+                        />
+                        {product ? (
+                          <span className="field-hint">Unit: {product.unit}</span>
+                        ) : null}
+                      </div>
 
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={item.purchasePrice}
-                      onChange={(event) =>
-                        updateItem(index, { ...item, purchasePrice: Number(event.target.value) })
-                      }
-                      placeholder="Price"
-                    />
+                      <div className="field">
+                        <FieldLabel
+                          htmlFor={`purchase-item-price-${index}`}
+                          label="Price per unit"
+                          info="What you paid the supplier for one unit. Line total = quantity × price per unit."
+                        />
+                        <input
+                          id={`purchase-item-price-${index}`}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          inputMode="decimal"
+                          value={item.purchasePrice}
+                          onChange={(event) =>
+                            updateItem(index, {
+                              ...item,
+                              purchasePrice: parseNumericDraft(event.target.value),
+                            })
+                          }
+                          placeholder="e.g. 300"
+                        />
+                      </div>
 
-                    <span className="purchase-item-total">
-                      {formatMoney(item.quantity * item.purchasePrice)}
-                      {product ? ` · ${product.unit}` : ""}
-                    </span>
+                      <div className="field purchase-item-summary">
+                        <span className="field-label-static">Line total</span>
+                        <strong className="purchase-item-total">{formatMoney(lineTotal)}</strong>
+                      </div>
 
-                    <button type="button" className="ghost-button ghost-button--danger" onClick={() => removeItem(index)}>
-                      Remove
-                    </button>
+                      <div className="purchase-item-actions">
+                        <button
+                          type="button"
+                          className="ghost-button ghost-button--danger"
+                          onClick={() => removeItem(index)}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 );
               })}
             </div>
 
-            <div className="purchase-total">
-              <strong>Total purchase amount</strong>
-              <span>{formatMoney(purchaseTotal)}</span>
+            <div className="purchase-summary">
+              <div className="purchase-total">
+                <strong>Total purchase amount</strong>
+                <span>{formatMoney(purchaseTotal)}</span>
+              </div>
+              <div className="purchase-total purchase-total--soft">
+                <strong>Paid now</strong>
+                <span>{formatMoney(amountPaidNow)}</span>
+              </div>
+              <div className="purchase-total">
+                <strong>Outstanding after save</strong>
+                <span>{formatMoney(outstandingAfterSave)}</span>
+              </div>
             </div>
 
             {feedback ? <p className="inline-note">{feedback}</p> : null}
@@ -858,19 +1043,25 @@ export function PurchasesPage() {
                       </div>
 
                       <div className="field">
-                        <label htmlFor="purchase-payment-amount">Amount</label>
+                        <FieldLabel
+                          htmlFor="purchase-payment-amount"
+                          label="Amount"
+                          info="How much you are paying the supplier now. It cannot be more than the outstanding balance."
+                        />
                         <input
                           id="purchase-payment-amount"
                           type="number"
                           min="0.01"
                           step="0.01"
+                          inputMode="decimal"
                           value={paymentForm.amount}
                           onChange={(event) =>
                             setPaymentForm((current) => ({
                               ...current,
-                              amount: Number(event.target.value),
+                              amount: parseNumericDraft(event.target.value),
                             }))
                           }
+                          placeholder="0"
                         />
                       </div>
                     </div>
@@ -994,28 +1185,50 @@ export function PurchasesPage() {
                         const quantity =
                           returnForm.items.find(
                             (candidate) => candidate.purchaseItemId === item.id,
-                          )?.quantity ?? 0;
+                          )?.quantity ?? "";
+                        const returnQty = resolveNumericDraft(quantity);
 
                         return (
-                          <div key={item.id} className="purchase-item-row">
-                            <span>
-                              {item.productName} · up to {Number(item.returnableQuantity).toFixed(3)}{" "}
-                              {item.unit}
-                            </span>
-                            <input
-                              type="number"
-                              min="0"
-                              max={Number(item.returnableQuantity)}
-                              step="0.001"
-                              value={quantity}
-                              onChange={(event) =>
-                                updateReturnQuantity(item.id, Number(event.target.value))
-                              }
-                              placeholder="Return qty"
-                            />
-                            <span className="purchase-item-total">
-                              {formatMoney(quantity * Number(item.purchasePrice))}
-                            </span>
+                          <div key={item.id} className="purchase-item-card">
+                            <div className="purchase-item-row purchase-item-row--compose">
+                              <div className="field">
+                                <div className="field-label-row">
+                                  <span className="field-label-static">{item.productName}</span>
+                                  <FieldInfo label={item.productName}>
+                                    Return up to {Number(item.returnableQuantity).toFixed(3)} {item.unit}.
+                                    Leave blank if this line is not being returned.
+                                  </FieldInfo>
+                                </div>
+                                <span className="field-hint">
+                                  Returnable: {Number(item.returnableQuantity).toFixed(3)} {item.unit}
+                                </span>
+                              </div>
+                              <div className="field">
+                                <label htmlFor={`purchase-return-qty-${item.id}`}>Quantity</label>
+                                <input
+                                  id={`purchase-return-qty-${item.id}`}
+                                  type="number"
+                                  min="0"
+                                  max={Number(item.returnableQuantity)}
+                                  step="0.001"
+                                  inputMode="decimal"
+                                  value={quantity}
+                                  onChange={(event) =>
+                                    updateReturnQuantity(
+                                      item.id,
+                                      parseNumericDraft(event.target.value),
+                                    )
+                                  }
+                                  placeholder="0"
+                                />
+                              </div>
+                              <div className="field purchase-item-summary">
+                                <span className="field-label-static">Line total</span>
+                                <strong className="purchase-item-total">
+                                  {formatMoney(returnQty * Number(item.purchasePrice))}
+                                </strong>
+                              </div>
+                            </div>
                           </div>
                         );
                       })}

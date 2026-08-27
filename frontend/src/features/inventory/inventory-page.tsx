@@ -7,6 +7,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/http-client";
+import { FieldLabel } from "@/components/ui/field-label";
 import { useAuth } from "@/features/auth/auth-context";
 import {
   adjustInventoryStock,
@@ -17,10 +18,21 @@ import {
   type InventoryStockItem,
 } from "@/features/inventory/inventory-api";
 import { useBusinessSettings } from "@/features/settings/use-business-settings";
+import {
+  parseNumericDraft,
+  resolveNumericDraft,
+  type NumericDraft,
+} from "@/lib/numeric-draft";
 
-const initialAdjustment: InventoryAdjustmentPayload = {
+type AdjustmentFormState = {
+  productId: string;
+  adjustmentQuantity: NumericDraft;
+  reason: string;
+};
+
+const initialAdjustment: AdjustmentFormState = {
   productId: "",
-  adjustmentQuantity: 0,
+  adjustmentQuantity: "",
   reason: "",
 };
 
@@ -34,7 +46,7 @@ export function InventoryPage() {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryStockItem | null>(null);
-  const [adjustment, setAdjustment] = useState<InventoryAdjustmentPayload>(initialAdjustment);
+  const [adjustment, setAdjustment] = useState<AdjustmentFormState>(initialAdjustment);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
@@ -72,7 +84,11 @@ export function InventoryPage() {
     onSuccess: async () => {
       setFeedback("Stock adjusted successfully.");
       setFieldErrors({});
-      setAdjustment(initialAdjustment);
+      setAdjustment({
+        productId: selectedItem?.productId ?? "",
+        adjustmentQuantity: "",
+        reason: "",
+      });
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["inventory-summary", businessId] }),
         queryClient.invalidateQueries({ queryKey: ["inventory-stock", businessId] }),
@@ -108,7 +124,7 @@ export function InventoryPage() {
     setSelectedItem(item);
     setAdjustment({
       productId: item.productId,
-      adjustmentQuantity: 0,
+      adjustmentQuantity: "",
       reason: "",
     });
     setFieldErrors({});
@@ -119,7 +135,17 @@ export function InventoryPage() {
     event.preventDefault();
     setFieldErrors({});
     setFeedback(null);
-    await adjustmentMutation.mutateAsync(adjustment);
+    if (adjustment.adjustmentQuantity === "" || resolveNumericDraft(adjustment.adjustmentQuantity) === 0) {
+      setFieldErrors({ adjustmentQuantity: "Enter a positive or negative quantity." });
+      setFeedback("Enter how much stock to add or remove.");
+      return;
+    }
+
+    await adjustmentMutation.mutateAsync({
+      productId: adjustment.productId,
+      adjustmentQuantity: resolveNumericDraft(adjustment.adjustmentQuantity),
+      reason: adjustment.reason,
+    });
   }
 
   if (!businessId) {
@@ -266,18 +292,24 @@ export function InventoryPage() {
 
               <form className="form-stack" onSubmit={handleSubmit}>
                 <div className="field">
-                  <label htmlFor="adjustment-quantity">Adjustment quantity</label>
+                  <FieldLabel
+                    htmlFor="adjustment-quantity"
+                    label="Adjustment quantity"
+                    info="Positive numbers add stock (found extra bags). Negative numbers remove stock (damage, count correction). Use the product unit shown above."
+                  />
                   <input
                     id="adjustment-quantity"
                     type="number"
                     step="0.001"
+                    inputMode="decimal"
                     value={adjustment.adjustmentQuantity}
                     onChange={(event) =>
                       setAdjustment((current) => ({
                         ...current,
-                        adjustmentQuantity: Number(event.target.value),
+                        adjustmentQuantity: parseNumericDraft(event.target.value),
                       }))
                     }
+                    placeholder="e.g. 5 or -2"
                   />
                   {fieldErrors.adjustmentQuantity ? (
                     <span className="field-error">{fieldErrors.adjustmentQuantity}</span>
@@ -285,7 +317,11 @@ export function InventoryPage() {
                 </div>
 
                 <div className="field">
-                  <label htmlFor="adjustment-reason">Reason</label>
+                  <FieldLabel
+                    htmlFor="adjustment-reason"
+                    label="Reason"
+                    info="Why stock is changing outside a purchase or sale. This is stored in stock history and cannot be edited later."
+                  />
                   <input
                     id="adjustment-reason"
                     value={adjustment.reason}
