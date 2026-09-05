@@ -2,9 +2,9 @@
 
 ## Status (this release)
 
-The product is **ready for a self-hosted Indian shop**: owner + staff, GST invoices, barcode counter, Excel reports, logo on PDFs, alerts, activity log, Docker local and HTTPS VPS overlay, backups, CI.
+The product is **ready for a self-hosted Indian shop**: owner + staff, GST invoices, barcode counter, Excel reports, logo on PDFs, alerts, activity log, Docker local and HTTPS VPS overlay, backups, CI, and a Phase 1 Windows desktop installer (local engine, no cloud sync yet). See [10-windows-desktop.md](10-windows-desktop.md).
 
-It is **not** a turnkey hosted SaaS (you supply SMTP and a domain) and it does **not** include e-way bill, WhatsApp, native apps, multi-warehouse, or full accounting.
+It is **not** a turnkey hosted SaaS (you supply SMTP and a domain) and it does **not** include e-way bill, WhatsApp, native mobile apps, multi-warehouse, or full accounting.
 
 Companion: [06-as-built-technical.md](06-as-built-technical.md).
 
@@ -48,7 +48,8 @@ A shop owner can:
 - E-way bill, e-invoice IRN, GSTR-1 auto-file
 - Managed category/unit master APIs (free-text + UI presets today)
 - Product images
-- WhatsApp / native apps / OCR
+- WhatsApp / native mobile apps / OCR
+- Windows desktop Phase 2 (cloud pair) and Phase 3 (two-way sync)
 - Multi-warehouse
 - Split of large sales/purchases page modules (works; maintainability only)
 

@@ -368,6 +368,23 @@ Priority: P2 / P3
 * [ ] Android App
 * [ ] iOS App
 
+# EPIC 17 — Windows desktop
+
+Priority: P1
+
+Hybrid register: bill on a Windows PC with no internet, then (later) sync to the VPS. **Phase 1 is the installable local app.** Do not sell the same stock from the phone cloud and an offline PC until Phase 3.
+
+### Features
+
+* [x] Spring `desktop` profile (localhost API, generated JWT, SPA from JAR, no SMTP)
+* [x] Tauri 2 window that starts bundled Postgres + JRE + JAR and opens http://127.0.0.1:18080/
+* [x] NSIS Setup.exe via GitHub Actions `windows-latest`
+* [x] Export / restore `.sql.gz` on Settings (restore applies on next launch)
+* [ ] Phase 2: pair with cloud shop, snapshot pull, backup push
+* [ ] Phase 3: two-way sync by replaying sales/stock movements
+
+Operator notes: [10-windows-desktop.md](10-windows-desktop.md).
+
 ---
 
 # Release Plan
@@ -403,12 +420,12 @@ Introduce AI-powered capabilities.
 
 # Current Sprint Goal
 
-**Self-hosted Indian shop product is in tree.** GST, staff roles, barcode counter, report Excel, logo PDFs, alerts, activity log, HTTPS overlay, and backups are implemented. See [07-path-to-usable-product.md](docs/07-path-to-usable-product.md).
+**Self-hosted Indian shop product is in tree.** GST, staff roles, barcode counter, report Excel, logo PDFs, alerts, activity log, HTTPS overlay, backups, and a Phase 1 Windows desktop installer path are implemented. See [07-path-to-usable-product.md](07-path-to-usable-product.md) and [10-windows-desktop.md](10-windows-desktop.md).
 
-As-built: [06-as-built-technical.md](docs/06-as-built-technical.md).
+As-built: [06-as-built-technical.md](06-as-built-technical.md).
 
 ## Status note (synced with codebase)
 
-P0 shop loop, P1 staff/audit/alerts/pagination, and India GST/barcode/report-export are done. Still open by choice: product images, e-way bill, attendance, native apps, WhatsApp, AI. Category/unit remain free-text.
+P0 shop loop, P1 staff/audit/alerts/pagination, and India GST/barcode/report-export are done. Windows desktop Phase 1 (local installer, no cloud sync) is in tree. Still open by choice: product images, e-way bill, attendance, native mobile apps, WhatsApp, AI, desktop Phase 2/3 sync. Category/unit remain free-text.
 
-Ops: README + Compose + nginx + Caddy prod overlay + backup scripts + MIT + CI (backend tests, frontend tests + build).
+Ops: README + Compose + nginx + Caddy prod overlay + backup scripts + MIT + CI (backend tests, frontend tests + build, Windows NSIS installer).

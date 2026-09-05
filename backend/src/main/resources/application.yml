@@ -69,3 +69,9 @@ app:
     allowed-origin-patterns:
       - http://localhost:*
       - http://127.0.0.1:*
+  desktop:
+    enabled: false
+    data-dir: ${APP_DATA_DIR:}
+    pg-bin: ${APP_DESKTOP_PG_BIN:}
+    db-host: ${DB_HOST:127.0.0.1}
+    db-port: ${DB_PORT:5432}

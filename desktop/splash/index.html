@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inventory Management</title>
+    <style>
+      :root {
+        color: #18212f;
+        font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+        background:
+          radial-gradient(circle at top left, rgba(244, 167, 98, 0.35), transparent 28%),
+          linear-gradient(180deg, #fffaf2 0%, #f7f4ee 100%);
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+      main {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+      }
+      .card {
+        width: min(28rem, 100%);
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(24, 33, 47, 0.08);
+        border-radius: 20px;
+        padding: 28px 24px;
+        box-shadow: 0 24px 60px rgba(60, 71, 88, 0.14);
+      }
+      .kicker {
+        display: inline-block;
+        margin-bottom: 8px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: rgba(219, 109, 52, 0.12);
+        color: #b95527;
+        font-size: 0.78rem;
+        font-weight: 700;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 1.4rem;
+      }
+      p {
+        margin: 0;
+        color: #5b6678;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="card">
+        <span class="kicker">This PC</span>
+        <h1>Starting the shop…</h1>
+        <p id="status">Opening the local register. This can take a few seconds the first time.</p>
+      </section>
+    </main>
+  </body>
+</html>

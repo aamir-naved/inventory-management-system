@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
+import com.inventory.desktop.DesktopBackupException;
+
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -44,7 +46,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiErrorResponse> handleMaxUploadSize(MaxUploadSizeExceededException exception) {
-        return buildResponse(HttpStatus.BAD_REQUEST, "Excel file must be 2 MB or smaller", Map.of());
+        return buildResponse(HttpStatus.BAD_REQUEST, "The uploaded file is too large", Map.of());
+    }
+
+    @ExceptionHandler(DesktopBackupException.class)
+    public ResponseEntity<ApiErrorResponse> handleDesktopBackup(DesktopBackupException exception) {
+        return buildResponse(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage(), Map.of());
     }
 
     private ResponseEntity<ApiErrorResponse> buildResponse(

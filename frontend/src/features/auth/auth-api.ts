@@ -144,7 +144,7 @@ export async function updateProfile(payload: UpdateProfilePayload) {
 }
 
 export async function getPublicConfig() {
-  return httpClient<{ openRegistration: boolean }>("/auth/public-config", {
+  return httpClient<{ openRegistration: boolean; desktop: boolean }>("/auth/public-config", {
     skipAuthRefresh: true,
   });
 }

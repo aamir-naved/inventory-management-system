@@ -4,7 +4,7 @@ This folder is the **operator manual** for people who run the shop: the owner, a
 
 It is written for someone who has **never used this software before**. You do not need accounting training. If you can use a phone browser and you already keep a paper register, you can use this system.
 
-Technical setup (Docker, SMTP, backups) lives in the project [README](../../README.md), not here. This guide assumes the shop software is already open in a browser — usually the HTTPS address your operator gave you, or **http://localhost:3000** on a local install. Do not run the database on the counter PC.
+Technical setup (Docker, SMTP, backups) lives in the project [README](../../README.md). Windows installer: [10-windows-desktop.md](../10-windows-desktop.md). This guide assumes the shop software is already open — the HTTPS address your operator gave you, **http://localhost:3000** on a local Docker install, or the **Inventory Management** window on a shop PC.
 
 ---
 

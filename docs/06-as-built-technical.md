@@ -12,9 +12,9 @@ Companion docs: [01-product-vision.md](01-product-vision.md), [02-mvp-scope.md](
 
 **What it is:** A self-hosted **inventory + GST buy/sell ledger**. Each shop is a `businesses` row. Shop users are OWNER / MANAGER / CLERK. A platform Super Admin (`PLATFORM_ADMIN`) creates and suspends shops from `/platform`. Production registration is closed unless `APP_OPEN_REGISTRATION=true`.
 
-**What it is not:** ERP, multi-warehouse, e-way bill, WhatsApp, native apps, or a hosted cloud SaaS (you operate Docker + SMTP).
+**What it is not:** ERP, multi-warehouse, e-way bill, WhatsApp, native mobile apps, or a billed hosted SaaS (you operate Docker + SMTP, or a shop PC runs the Phase 1 Windows installer).
 
-**Maturity:** Daily shop loop, staff RBAC, GST documents, POS barcode, report Excel, audit, alerts, mobile nav, Compose, HTTPS overlay, backups, CI, and MIT license are in the tree.
+**Maturity:** Daily shop loop, staff RBAC, GST documents, POS barcode, report Excel, audit, alerts, mobile nav, Compose, HTTPS overlay, backups, CI, MIT license, and Phase 1 Windows desktop packaging are in the tree.
 
 ---
 
@@ -28,7 +28,7 @@ Companion docs: [01-product-vision.md](01-product-vision.md), [02-mvp-scope.md](
 | Tenancy | `X-Business-Id` + active membership + `businesses.active` |
 | RBAC | `OWNER` / `MANAGER` / `CLERK` on membership; `PLATFORM_ADMIN` on `app_users` (no membership) |
 | Docs/Excel | OpenPDF invoices/bills (logo, GSTIN, HSN/tax); POI product + report workbooks |
-| Deploy | `docker-compose.yml` (local); `docker-compose.prod.yml` + Caddy HTTPS; `scripts/backup.sh` |
+| Deploy | `docker-compose.yml` (local); `docker-compose.prod.yml` + Caddy HTTPS; `scripts/backup.sh`; Windows NSIS via `desktop/` (Tauri + bundled JRE/Postgres) |
 
 ---
 
@@ -38,14 +38,15 @@ Companion docs: [01-product-vision.md](01-product-vision.md), [02-mvp-scope.md](
 ├── docs/
 ├── backend/                 Spring Boot modular monolith
 ├── frontend/                Vite React SPA (nginx `/api` proxy in image)
-├── scripts/                 dev.sh, build.sh, test.sh, deploy.sh, backup.sh, restore.sh
+├── desktop/                 Tauri 2 Windows shell (splash + sidecar)
+├── scripts/                 dev.sh, build.sh, test.sh, deploy.sh, backup.sh, restore.sh, desktop-dev.sh
 ├── docker-compose.yml       Local Postgres + API + UI
 ├── docker-compose.prod.yml  Hide DB/API ports; Caddy 80/443
 ├── Caddyfile
 ├── Makefile
 ├── .env.example
 ├── LICENSE                  MIT
-└── .github/workflows/       mvn test; npm test + build
+└── .github/workflows/       mvn test; npm test + build; Windows NSIS installer
 ```
 
 ### Compose runtime

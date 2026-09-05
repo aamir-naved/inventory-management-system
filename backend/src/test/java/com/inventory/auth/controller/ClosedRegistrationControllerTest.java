@@ -26,7 +26,8 @@ class ClosedRegistrationControllerTest extends AuthenticatedControllerTestSuppor
     void publicConfigShowsRegistrationClosed() throws Exception {
         mockMvc.perform(get("/auth/public-config"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.openRegistration").value(false));
+            .andExpect(jsonPath("$.openRegistration").value(false))
+            .andExpect(jsonPath("$.desktop").value(false));
     }
 
     @Test

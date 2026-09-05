@@ -22,6 +22,7 @@ import com.inventory.auth.dto.PhoneOtpVerifyRequest;
 import com.inventory.auth.dto.PublicConfigResponse;
 import com.inventory.auth.service.AuthService;
 import com.inventory.auth.service.OtpAuthService;
+import com.inventory.config.DesktopProperties;
 import com.inventory.config.RegistrationPolicy;
 import com.inventory.staff.dto.AcceptInviteRequest;
 import com.inventory.staff.dto.StaffInvitePreviewResponse;
@@ -38,22 +39,25 @@ public class AuthController {
     private final OtpAuthService otpAuthService;
     private final StaffService staffService;
     private final RegistrationPolicy registrationPolicy;
+    private final DesktopProperties desktopProperties;
 
     public AuthController(
         AuthService authService,
         OtpAuthService otpAuthService,
         StaffService staffService,
-        RegistrationPolicy registrationPolicy
+        RegistrationPolicy registrationPolicy,
+        DesktopProperties desktopProperties
     ) {
         this.authService = authService;
         this.otpAuthService = otpAuthService;
         this.staffService = staffService;
         this.registrationPolicy = registrationPolicy;
+        this.desktopProperties = desktopProperties;
     }
 
     @GetMapping("/public-config")
     public PublicConfigResponse publicConfig() {
-        return new PublicConfigResponse(registrationPolicy.isOpen());
+        return new PublicConfigResponse(registrationPolicy.isOpen(), desktopProperties.isEnabled());
     }
 
     @PostMapping("/register")

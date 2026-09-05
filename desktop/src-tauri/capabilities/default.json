@@ -1,0 +1,12 @@
+{
+  "identifier": "default",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://127.0.0.1:18080/*", "http://localhost:18080/*"]
+  },
+  "permissions": [
+    "core:default",
+    "core:webview:allow-eval",
+    "core:webview:allow-set-webview-url"
+  ]
+}

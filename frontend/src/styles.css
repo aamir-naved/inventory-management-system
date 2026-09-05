@@ -169,6 +169,11 @@ button {
   font-weight: 700;
 }
 
+.panel code {
+  font-size: 0.86rem;
+  word-break: break-all;
+}
+
 .ghost-button,
 .primary-button {
   border: none;

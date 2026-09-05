@@ -38,6 +38,17 @@ Click **Save settings**. Success: **Settings saved.**
 
 ---
 
+## Backup this PC (Windows desktop only)
+
+If you installed the Windows app, Settings also shows **Backup this PC**. Cloud/browser installs do not.
+
+- **Export backup** downloads a `.sql.gz` file. Keep it off this computer.
+- **Queue restore** picks that file. Then **close the app and open it again** so the backup replaces local data.
+
+Details: [Windows desktop](../10-windows-desktop.md).
+
+---
+
 ## When to choose what
 
 **Date format:** Indian shops usually keep `dd/MM/yyyy`.

@@ -1,4 +1,4 @@
-.PHONY: start stop restart status logs up down test backup restore prod
+.PHONY: start stop restart status logs up down test backup restore prod desktop-dev
 
 start:
 	./scripts/app.sh start
@@ -27,3 +27,6 @@ backup:
 
 prod:
 	./scripts/deploy.sh
+
+desktop-dev:
+	./scripts/desktop-dev.sh

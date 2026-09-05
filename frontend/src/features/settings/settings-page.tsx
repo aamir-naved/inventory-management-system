@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError } from "@/api/http-client";
 import { FieldLabel } from "@/components/ui/field-label";
 import { useAuth } from "@/features/auth/auth-context";
+import { getPublicConfig } from "@/features/auth/auth-api";
 import { formatDate, formatMoney } from "@/features/settings/format";
 import {
   DATE_FORMAT_OPTIONS,
@@ -12,6 +13,11 @@ import {
   updateSettings,
   type SettingsPayload,
 } from "@/features/settings/settings-api";
+import {
+  downloadDesktopBackup,
+  getDesktopInfo,
+  uploadDesktopRestore,
+} from "@/features/settings/desktop-api";
 import {
   parseNumericDraft,
   resolveNumericDraft,
@@ -50,11 +56,24 @@ export function SettingsPage() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [feedbackTone, setFeedbackTone] = useState<"error" | "success">("error");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
+  const [backupMessage, setBackupMessage] = useState<string | null>(null);
+  const [backupTone, setBackupTone] = useState<"error" | "success">("error");
 
   const settingsQuery = useQuery({
     queryKey: ["settings", businessId],
     queryFn: () => getSettings(businessId!),
     enabled: Boolean(businessId),
+  });
+  const publicConfigQuery = useQuery({
+    queryKey: ["public-config"],
+    queryFn: getPublicConfig,
+  });
+  const desktop = publicConfigQuery.data?.desktop === true;
+  const desktopInfoQuery = useQuery({
+    queryKey: ["desktop-info"],
+    queryFn: getDesktopInfo,
+    enabled: desktop,
   });
 
   useEffect(() => {
@@ -331,6 +350,90 @@ export function SettingsPage() {
           </form>
         )}
       </section>
+
+      {desktop ? (
+        <section className="panel">
+          <h3>Backup this PC</h3>
+          <p className="inline-note">
+            Shop data lives in{" "}
+            <code>{desktopInfoQuery.data?.dataDir ?? "this computer's app data folder"}</code>.
+            Export a copy you can keep on a USB drive. Restore replaces everything on this PC
+            the next time you open the app.
+          </p>
+          <div className="form-stack">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                setBackupMessage(null);
+                void downloadDesktopBackup(businessId)
+                  .then(() => {
+                    setBackupTone("success");
+                    setBackupMessage("Backup downloaded.");
+                  })
+                  .catch((error: unknown) => {
+                    setBackupTone("error");
+                    setBackupMessage(
+                      error instanceof Error ? error.message : "Unable to export a backup.",
+                    );
+                  });
+              }}
+            >
+              Export backup
+            </button>
+            <div className="field">
+              <FieldLabel
+                htmlFor="desktop-restore"
+                label="Restore backup"
+                info="Use a .sql.gz file exported from this app. Close and reopen after restore."
+              />
+              <input
+                id="desktop-restore"
+                type="file"
+                accept=".gz,.sql.gz"
+                onChange={(event) => setRestoreFile(event.target.files?.[0] ?? null)}
+              />
+            </div>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={!restoreFile}
+              onClick={() => {
+                if (!restoreFile) {
+                  return;
+                }
+                setBackupMessage(null);
+                void uploadDesktopRestore(restoreFile)
+                  .then((result) => {
+                    setBackupTone("success");
+                    setBackupMessage(result.message);
+                  })
+                  .catch((error: unknown) => {
+                    setBackupTone("error");
+                    setBackupMessage(
+                      error instanceof Error ? error.message : "Unable to queue restore.",
+                    );
+                  });
+              }}
+            >
+              Queue restore
+            </button>
+            {desktopInfoQuery.data?.pendingRestore ? (
+              <p className="inline-note">
+                A restore is waiting. Close this window and open the app again to apply it.
+              </p>
+            ) : null}
+            {backupMessage ? (
+              <p
+                className={backupTone === "success" ? "form-success" : "form-error"}
+                role={backupTone === "success" ? "status" : "alert"}
+              >
+                {backupMessage}
+              </p>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
     </>
   );
 }

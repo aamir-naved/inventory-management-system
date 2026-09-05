@@ -1,0 +1,47 @@
+server:
+  port: ${SERVER_PORT:18080}
+  address: 127.0.0.1
+  servlet:
+    context-path: /api
+
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://127.0.0.1:54329/inventory_management}
+    username: ${DB_USERNAME:inventory_user}
+    password: ${DB_PASSWORD:inventory_password}
+  jpa:
+    show-sql: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+app:
+  desktop:
+    enabled: true
+    data-dir: ${APP_DATA_DIR:}
+    pg-bin: ${APP_DESKTOP_PG_BIN:}
+    db-host: ${DB_HOST:127.0.0.1}
+    db-port: ${DB_PORT:54329}
+  auth:
+    jwt-secret: ${APP_JWT_SECRET:}
+    public-app-url: ${APP_PUBLIC_APP_URL:http://127.0.0.1:18080}
+  platform:
+    open-registration: ${APP_OPEN_REGISTRATION:true}
+  cors:
+    allowed-origins:
+      - http://127.0.0.1:18080
+      - http://localhost:18080
+    allowed-origin-patterns:
+      - http://127.0.0.1:*
+      - http://localhost:*
+
+logging:
+  level:
+    root: INFO
+    com.inventory: INFO

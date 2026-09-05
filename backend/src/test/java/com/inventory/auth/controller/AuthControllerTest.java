@@ -44,7 +44,8 @@ class AuthControllerTest {
     void publicConfigShowsRegistrationOpenInTests() throws Exception {
         mockMvc.perform(get("/auth/public-config"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.openRegistration").value(true));
+            .andExpect(jsonPath("$.openRegistration").value(true))
+            .andExpect(jsonPath("$.desktop").value(false));
     }
 
     @Test

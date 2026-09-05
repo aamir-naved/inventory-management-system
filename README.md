@@ -58,7 +58,7 @@ Copy the link from `docker compose logs backend` (or `make logs`).
 - Activity log for sales, purchases, and staff changes
 - Phone-friendly navigation
 
-Out of scope: native mobile apps, WhatsApp Business API, e-way bill, multi-warehouse, and full accounting. Device share / `wa.me` for invoice PDFs is in scope.
+Out of scope: native mobile apps, WhatsApp Business API, e-way bill, multi-warehouse, and full accounting. Device share / `wa.me` for invoice PDFs is in scope. A Phase 1 **Windows desktop installer** (local engine, no cloud sync yet) is documented in [docs/10-windows-desktop.md](docs/10-windows-desktop.md).
 
 ## Production (HTTPS on a VPS)
 
@@ -150,6 +150,7 @@ Copy [.env.example](.env.example) to `.env` for Compose interpolation.
 | [07-path-to-usable-product.md](docs/07-path-to-usable-product.md) | Market-ready status and remaining out-of-scope items |
 | [08-small-town-cloud.md](docs/08-small-town-cloud.md) | Hosted register: phone OTP, sell-first, backups |
 | [09-platform-admin.md](docs/09-platform-admin.md) | Super Admin console: add/suspend shops |
+| [10-windows-desktop.md](docs/10-windows-desktop.md) | Phase 1 Windows installer (local engine) |
 | [user-guide/](docs/user-guide/README.md) | Shop operator screens |
 
 ## Stack

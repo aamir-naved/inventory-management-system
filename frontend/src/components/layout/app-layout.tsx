@@ -4,6 +4,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 
 import { useAuth } from "@/features/auth/auth-context";
+import { getPublicConfig } from "@/features/auth/auth-api";
 import { canManageCatalog, canManageStaff, canViewReports } from "@/features/auth/roles";
 import { listNotifications } from "@/features/notifications/notification-api";
 
@@ -29,6 +30,11 @@ export function AppLayout() {
     enabled: Boolean(businessId),
     refetchInterval: 60_000,
   });
+  const publicConfigQuery = useQuery({
+    queryKey: ["public-config"],
+    queryFn: getPublicConfig,
+  });
+  const desktop = publicConfigQuery.data?.desktop === true;
 
   const navItems = useMemo<NavItem[]>(
     () => {
@@ -94,11 +100,18 @@ export function AppLayout() {
 
       <aside className={`sidebar${menuOpen ? " sidebar--open" : ""}`}>
         <div className="sidebar__brand">
-          <span className="brand-kicker">Inventory for your shop</span>
-          <h1>Bill from the counter. Stock stays on the server.</h1>
+          <span className="brand-kicker">
+            {desktop ? "This PC" : "Inventory for your shop"}
+          </span>
+          <h1>
+            {desktop
+              ? "Bill from the counter. Stock stays on this computer."
+              : "Bill from the counter. Stock stays on the server."}
+          </h1>
           <p>
-            Open this link on a phone. Sales, stock, and invoices live in the cloud — not on
-            a shop PC that can be lost.
+            {desktop
+              ? "This window talks to a local database. Export a backup from Settings so a lost PC is not the only copy."
+              : "Open this link on a phone. Sales, stock, and invoices live in the cloud — not on a shop PC that can be lost."}
           </p>
         </div>
 
@@ -144,7 +157,11 @@ export function AppLayout() {
               Alerts ({notificationsQuery.data?.count ?? 0})
             </button>
             <span className="badge">
-              {session?.businessId ? "Business ready" : "Setup pending"}
+              {desktop
+                ? "Desktop"
+                : session?.businessId
+                  ? "Business ready"
+                  : "Setup pending"}
             </span>
             <button
               type="button"
