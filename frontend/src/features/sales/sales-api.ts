@@ -1,9 +1,11 @@
 import { httpClient } from "@/api/http-client";
+import { withPaging, type PageRequest, type PagedResult } from "@/api/paging";
 
 export type SaleItemPayload = {
   productId: string;
   quantity: number;
   sellingPrice: number;
+  gstRate?: number;
 };
 
 export type SalePayload = {
@@ -11,6 +13,7 @@ export type SalePayload = {
   saleDate: string;
   amountPaid: number;
   notes: string;
+  interstate?: boolean;
   items: SaleItemPayload[];
 };
 
@@ -27,6 +30,12 @@ export type SaleItemRecord = {
   quantity: number;
   sellingPrice: number;
   lineTotal: number;
+  hsnCode: string | null;
+  gstRate: number;
+  taxableAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
   returnedQuantity: number;
   returnableQuantity: number;
 };
@@ -48,6 +57,11 @@ export type SaleRecord = {
   cancelled: boolean;
   cancellationReason: string | null;
   hasReturns: boolean;
+  interstate: boolean;
+  taxableAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
   items: SaleItemRecord[];
   createdAt: string;
   updatedAt: string;
@@ -90,14 +104,13 @@ export type SaleReturnRecord = {
   updatedAt: string;
 };
 
-export async function listSales(businessId: string, search?: string) {
-  const params = new URLSearchParams();
+export async function listSales(businessId: string, search?: string, paging: PageRequest = {}) {
+  const params = withPaging(new URLSearchParams(), paging);
   if (search?.trim()) {
     params.set("search", search.trim());
   }
 
-  const query = params.toString();
-  return httpClient<SaleRecord[]>(`/sales${query ? `?${query}` : ""}`, {
+  return httpClient<PagedResult<SaleRecord>>(`/sales?${params.toString()}`, {
     businessId,
   });
 }
@@ -107,6 +120,12 @@ export async function createSale(businessId: string, payload: SalePayload) {
     method: "POST",
     businessId,
     body: payload,
+  });
+}
+
+export async function getSale(businessId: string, saleId: string) {
+  return httpClient<SaleRecord>(`/sales/${saleId}`, {
+    businessId,
   });
 }
 

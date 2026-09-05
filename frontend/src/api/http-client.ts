@@ -28,6 +28,10 @@ type RequestOptions = {
   skipAuthRefresh?: boolean;
 };
 
+function isFormData(body: unknown): body is FormData {
+  return typeof FormData !== "undefined" && body instanceof FormData;
+}
+
 let refreshPromise: Promise<boolean> | null = null;
 
 async function parseResponse(response: Response) {
@@ -104,6 +108,11 @@ async function tryRefreshSession(): Promise<boolean> {
       user: {
         ...authPayload.user,
         emailVerified: Boolean(authPayload.user.emailVerified),
+        platformRole: authPayload.user.platformRole === "PLATFORM_ADMIN" ? "PLATFORM_ADMIN" : null,
+        role:
+          authPayload.user.platformRole === "PLATFORM_ADMIN"
+            ? null
+            : authPayload.user.role ?? session.user.role ?? null,
       },
     });
 
@@ -136,17 +145,23 @@ export async function httpClient<T>(
   }: RequestOptions = {},
 ): Promise<T> {
   const authSession = readStoredAuthSession();
+  const formData = isFormData(body);
+  const requestHeaders: Record<string, string> = {
+    ...(formData ? {} : { "Content-Type": "application/json" }),
+    ...(authSession ? { Authorization: `Bearer ${authSession.accessToken}` } : {}),
+  };
+  if (businessId && !path.startsWith("/platform")) {
+    requestHeaders["X-Business-Id"] = businessId;
+  }
 
   const response = await fetch(`${appConfig.apiBaseUrl}${path}`, {
     method,
     signal,
     headers: {
-      "Content-Type": "application/json",
-      ...(authSession ? { Authorization: `Bearer ${authSession.accessToken}` } : {}),
-      ...(businessId ? { "X-Business-Id": businessId } : {}),
+      ...requestHeaders,
       ...headers,
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: formData ? body : body ? JSON.stringify(body) : undefined,
   });
 
   if (response.status === 401 && !skipAuthRefresh && path !== "/auth/refresh") {
@@ -161,6 +176,10 @@ export async function httpClient<T>(
         skipAuthRefresh: true,
       });
     }
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   const payload = await parseResponse(response);

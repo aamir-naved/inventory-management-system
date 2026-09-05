@@ -1,5 +1,7 @@
 package com.inventory.customer.service;
 
+import com.inventory.common.api.PagedResponse;
+import com.inventory.common.api.Pagination;
 import com.inventory.common.tenant.TenantContext;
 import com.inventory.customer.dto.CustomerRequest;
 import com.inventory.customer.dto.CustomerResponse;
@@ -46,11 +48,21 @@ public class CustomerService {
     }
 
     @Transactional(readOnly = true)
-    public List<CustomerResponse> list(String search, boolean includeArchived) {
-        return customerRepository.search(requireBusinessId(), normalizeSearch(search), includeArchived)
-            .stream()
-            .map(this::toResponse)
-            .toList();
+    public PagedResponse<CustomerResponse> list(
+        String search,
+        boolean includeArchived,
+        Integer page,
+        Integer size
+    ) {
+        return Pagination.map(
+            customerRepository.search(
+                requireBusinessId(),
+                normalizeSearch(search),
+                includeArchived,
+                Pagination.pageable(page, size)
+            ),
+            this::toResponse
+        );
     }
 
     @Transactional(readOnly = true)
@@ -115,6 +127,12 @@ public class CustomerService {
     public CustomerResponse archive(UUID id) {
         Customer customer = findCustomer(id);
         customer.setArchived(true);
+        return toResponse(customer);
+    }
+
+    public CustomerResponse unarchive(UUID id) {
+        Customer customer = findCustomer(id);
+        customer.setArchived(false);
         return toResponse(customer);
     }
 

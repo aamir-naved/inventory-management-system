@@ -48,7 +48,47 @@ class CustomerControllerTest extends AuthenticatedControllerTestSupport {
 
         mockMvc.perform(get("/customers").header("Authorization", authorizationHeader).header("X-Business-Id", businessId))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(1));
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.totalItems").value(1));
+    }
+
+    @Test
+    void archivesAndUnarchivesCustomer() throws Exception {
+        String customerId = createCustomer("Apex Builders");
+
+        mockMvc.perform(patch("/customers/{id}/archive", customerId)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.archived").value(true));
+
+        mockMvc.perform(get("/customers")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(0))
+            .andExpect(jsonPath("$.totalItems").value(0));
+
+        mockMvc.perform(get("/customers")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .param("includeArchived", "true"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].archived").value(true));
+
+        mockMvc.perform(patch("/customers/{id}/unarchive", customerId)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.archived").value(false));
+
+        mockMvc.perform(get("/customers")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].archived").value(false));
     }
 
     @Test
@@ -89,6 +129,23 @@ class CustomerControllerTest extends AuthenticatedControllerTestSupport {
             .andExpect(jsonPath("$.length()").value(3))
             .andExpect(jsonPath("$[?(@.cancelled == true)]").exists())
             .andExpect(jsonPath("$[?(@.outstandingAmount == 1300.0)]").exists());
+    }
+
+    @Test
+    void paginatesCustomerList() throws Exception {
+        createCustomer("Apex Builders");
+        createCustomer("Beta Contractors");
+        createCustomer("Gamma Homes");
+
+        mockMvc.perform(get("/customers")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .param("size", "2")
+                .param("page", "0"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(2))
+            .andExpect(jsonPath("$.totalItems").value(3))
+            .andExpect(jsonPath("$.totalPages").value(2));
     }
 
     private String createCustomer(String name) throws Exception {

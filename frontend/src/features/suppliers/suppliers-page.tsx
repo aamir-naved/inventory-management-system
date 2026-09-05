@@ -8,6 +8,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/http-client";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 import { useAuth } from "@/features/auth/auth-context";
 import {
   archiveSupplier,
@@ -15,6 +16,7 @@ import {
   getSupplierSummary,
   listSupplierPurchases,
   listSuppliers,
+  unarchiveSupplier,
   updateSupplier,
   type SupplierPayload,
   type SupplierRecord,
@@ -44,6 +46,7 @@ export function SuppliersPage() {
   const { formatMoney, formatDate } = useBusinessSettings();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
+  const [page, setPage] = useState(0);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<SupplierRecord | null>(null);
   const [form, setForm] = useState<SupplierPayload>(initialForm);
@@ -51,11 +54,12 @@ export function SuppliersPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const suppliersQuery = useQuery({
-    queryKey: ["suppliers", businessId, deferredSearch, includeArchived],
+    queryKey: ["suppliers", businessId, deferredSearch, includeArchived, page],
     queryFn: () =>
       listSuppliers(businessId!, {
         search: deferredSearch,
         includeArchived,
+        page,
       }),
     enabled: Boolean(businessId),
   });
@@ -80,6 +84,10 @@ export function SuppliersPage() {
 
     setForm(toPayload(selectedSupplier));
   }, [selectedSupplier]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [deferredSearch, includeArchived]);
 
   const saveMutation = useMutation({
     mutationFn: async (payload: SupplierPayload) => {
@@ -130,7 +138,7 @@ export function SuppliersPage() {
       return archiveSupplier(businessId, supplier.id);
     },
     onSuccess: async (supplier) => {
-      setFeedback(`${supplier.name} archived.`);
+      setFeedback(`${supplier.name} archived and hidden from the default list.`);
       if (selectedSupplier?.id === supplier.id) {
         setSelectedSupplier(null);
       }
@@ -144,6 +152,29 @@ export function SuppliersPage() {
     },
     onError: () => {
       setFeedback("Unable to archive supplier.");
+    },
+  });
+
+  const unarchiveMutation = useMutation({
+    mutationFn: async (supplier: SupplierRecord) => {
+      if (!businessId) {
+        throw new Error("Business setup is required before suppliers can be managed.");
+      }
+
+      return unarchiveSupplier(businessId, supplier.id);
+    },
+    onSuccess: async (supplier) => {
+      setFeedback(`${supplier.name} restored to the default list.`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["suppliers", businessId] }),
+        queryClient.invalidateQueries({ queryKey: ["supplier-summary", businessId, supplier.id] }),
+        queryClient.invalidateQueries({
+          queryKey: ["supplier-purchases", businessId, supplier.id],
+        }),
+      ]);
+    },
+    onError: () => {
+      setFeedback("Unable to restore supplier.");
     },
   });
 
@@ -170,7 +201,7 @@ export function SuppliersPage() {
       <section className="empty-state">
         <span className="brand-kicker">Business required</span>
         <h1>Finish business setup before managing suppliers.</h1>
-        <p>Suppliers are tenant-scoped, so we need the business profile saved first.</p>
+        <p>Set up your business first so suppliers belong to the right shop.</p>
       </section>
     );
   }
@@ -182,7 +213,8 @@ export function SuppliersPage() {
         <h1>Track supplier contacts, what you owe, and purchase history together.</h1>
         <p>
           Create and update suppliers here, then open any party to review billed totals and every
-          purchase tied to them.
+          purchase tied to them. Archive hides a supplier from the default list; use Show archived
+          to find them, then Restore to bring them back.
         </p>
       </section>
 
@@ -260,7 +292,11 @@ export function SuppliersPage() {
           <div className="panel-heading">
             <div>
               <h3>Suppliers</h3>
-              <p>Search by name, contact, or mobile.</p>
+              <p>
+                Search by name, contact, or mobile. Archived suppliers stay saved but are
+                hidden unless Show archived is on. Restore puts them back on the default
+                list.
+              </p>
             </div>
             <label className="toggle">
               <input
@@ -284,7 +320,7 @@ export function SuppliersPage() {
 
           {suppliersQuery.isLoading ? <p className="inline-note">Loading suppliers...</p> : null}
 
-          {!suppliersQuery.isLoading && (suppliersQuery.data?.length ?? 0) === 0 ? (
+          {!suppliersQuery.isLoading && (suppliersQuery.data?.totalItems ?? 0) === 0 ? (
             <div className="empty-inline-state">
               <strong>No suppliers yet</strong>
               <p>Create your first supplier to track purchases and dues.</p>
@@ -292,7 +328,7 @@ export function SuppliersPage() {
           ) : null}
 
           <div className="product-list">
-            {suppliersQuery.data?.map((supplier) => (
+            {suppliersQuery.data?.items.map((supplier) => (
               <article
                 key={supplier.id}
                 className={`product-card${
@@ -343,11 +379,21 @@ export function SuppliersPage() {
                     >
                       Archive
                     </button>
-                  ) : null}
+                  ) : (
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      disabled={unarchiveMutation.isPending}
+                      onClick={() => unarchiveMutation.mutate(supplier)}
+                    >
+                      Restore
+                    </button>
+                  )}
                 </div>
               </article>
             ))}
           </div>
+          <PaginationBar page={suppliersQuery.data} onPageChange={setPage} />
         </article>
       </section>
 

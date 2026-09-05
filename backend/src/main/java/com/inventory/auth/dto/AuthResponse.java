@@ -15,9 +15,12 @@ public record AuthResponse(
         UUID userId,
         String fullName,
         String email,
+        String phone,
         boolean emailVerified,
         UUID businessId,
-        String businessName
+        String businessName,
+        String role,
+        String platformRole
     ) {
     }
 }

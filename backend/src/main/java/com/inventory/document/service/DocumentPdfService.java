@@ -18,6 +18,7 @@ import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
 import com.lowagie.text.FontFactory;
+import com.lowagie.text.Image;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Paragraph;
 import com.lowagie.text.Phrase;
@@ -103,25 +104,45 @@ public class DocumentPdfService {
                 paymentStatus
             );
 
-            PdfPTable items = newItemTable();
-            addHeaderRow(items, "Product", "Unit", "Qty", "Price", "Line total");
-            for (SaleItem item : sale.getItems()) {
-                addItemRow(
-                    items,
-                    item.getProduct().getName(),
-                    item.getProduct().getUnit(),
-                    formatQty(item.getQuantity()),
-                    formatMoney(item.getUnitPrice(), business.getCurrencyCode()),
-                    formatMoney(item.getLineTotal(), business.getCurrencyCode())
-                );
+            PdfPTable items = business.isGstEnabled() ? newGstItemTable() : newItemTable();
+            if (business.isGstEnabled()) {
+                addHeaderRow(items, "Product", "HSN", "Qty", "Price", "Taxable", "Tax", "Line total");
+                for (SaleItem item : sale.getItems()) {
+                    addItemRow(
+                        items,
+                        item.getProduct().getName(),
+                        blankToDash(item.getHsnCode()),
+                        formatQty(item.getQuantity()),
+                        formatMoney(item.getUnitPrice(), business.getCurrencyCode()),
+                        formatMoney(item.getTaxableAmount(), business.getCurrencyCode()),
+                        formatMoney(item.getCgstAmount().add(item.getSgstAmount()).add(item.getIgstAmount()), business.getCurrencyCode()),
+                        formatMoney(item.getLineTotal(), business.getCurrencyCode())
+                    );
+                }
+            } else {
+                addHeaderRow(items, "Product", "Unit", "Qty", "Price", "Line total");
+                for (SaleItem item : sale.getItems()) {
+                    addItemRow(
+                        items,
+                        item.getProduct().getName(),
+                        item.getProduct().getUnit(),
+                        formatQty(item.getQuantity()),
+                        formatMoney(item.getUnitPrice(), business.getCurrencyCode()),
+                        formatMoney(item.getLineTotal(), business.getCurrencyCode())
+                    );
+                }
             }
             document.add(items);
             document.add(spacer());
 
             addTotals(
                 document,
-                business.getCurrencyCode(),
+                business,
                 sale.getTotalAmount(),
+                sale.getTaxableAmount(),
+                sale.getCgstAmount(),
+                sale.getSgstAmount(),
+                sale.getIgstAmount(),
                 returnedAmount,
                 netAmount,
                 amountPaid,
@@ -187,25 +208,45 @@ public class DocumentPdfService {
                 paymentStatus
             );
 
-            PdfPTable items = newItemTable();
-            addHeaderRow(items, "Product", "Unit", "Qty", "Cost", "Line total");
-            for (PurchaseItem item : purchase.getItems()) {
-                addItemRow(
-                    items,
-                    item.getProduct().getName(),
-                    item.getProduct().getUnit(),
-                    formatQty(item.getQuantity()),
-                    formatMoney(item.getUnitCost(), business.getCurrencyCode()),
-                    formatMoney(item.getLineTotal(), business.getCurrencyCode())
-                );
+            PdfPTable items = business.isGstEnabled() ? newGstItemTable() : newItemTable();
+            if (business.isGstEnabled()) {
+                addHeaderRow(items, "Product", "HSN", "Qty", "Cost", "Taxable", "Tax", "Line total");
+                for (PurchaseItem item : purchase.getItems()) {
+                    addItemRow(
+                        items,
+                        item.getProduct().getName(),
+                        blankToDash(item.getHsnCode()),
+                        formatQty(item.getQuantity()),
+                        formatMoney(item.getUnitCost(), business.getCurrencyCode()),
+                        formatMoney(item.getTaxableAmount(), business.getCurrencyCode()),
+                        formatMoney(item.getCgstAmount().add(item.getSgstAmount()).add(item.getIgstAmount()), business.getCurrencyCode()),
+                        formatMoney(item.getLineTotal(), business.getCurrencyCode())
+                    );
+                }
+            } else {
+                addHeaderRow(items, "Product", "Unit", "Qty", "Cost", "Line total");
+                for (PurchaseItem item : purchase.getItems()) {
+                    addItemRow(
+                        items,
+                        item.getProduct().getName(),
+                        item.getProduct().getUnit(),
+                        formatQty(item.getQuantity()),
+                        formatMoney(item.getUnitCost(), business.getCurrencyCode()),
+                        formatMoney(item.getLineTotal(), business.getCurrencyCode())
+                    );
+                }
             }
             document.add(items);
             document.add(spacer());
 
             addTotals(
                 document,
-                business.getCurrencyCode(),
+                business,
                 purchase.getTotalAmount(),
+                purchase.getTaxableAmount(),
+                purchase.getCgstAmount(),
+                purchase.getSgstAmount(),
+                purchase.getIgstAmount(),
                 returnedAmount,
                 netAmount,
                 amountPaid,
@@ -228,6 +269,17 @@ public class DocumentPdfService {
     }
 
     private void addBusinessHeader(Document document, Business business) throws DocumentException {
+        if (business.getLogoBytes() != null && business.getLogoBytes().length > 0) {
+            try {
+                Image logo = Image.getInstance(business.getLogoBytes());
+                logo.scaleToFit(120, 48);
+                logo.setAlignment(Element.ALIGN_LEFT);
+                document.add(logo);
+            } catch (Exception ignored) {
+                // Skip a corrupt logo rather than failing the invoice.
+            }
+        }
+
         Paragraph name = new Paragraph(business.getName(), titleFont());
         name.setAlignment(Element.ALIGN_LEFT);
         document.add(name);
@@ -236,6 +288,12 @@ public class DocumentPdfService {
             document.add(new Paragraph(business.getAddressLine(), bodyFont()));
         }
         document.add(new Paragraph("Mobile: " + business.getMobileNumber(), bodyFont()));
+        if (business.isGstEnabled() && business.getGstin() != null && !business.getGstin().isBlank()) {
+            document.add(new Paragraph("GSTIN: " + business.getGstin(), bodyFont()));
+        }
+        if (business.getStateName() != null && !business.getStateName().isBlank()) {
+            document.add(new Paragraph("State: " + business.getStateName(), mutedFont()));
+        }
         document.add(new Paragraph("Currency: " + business.getCurrencyCode(), mutedFont()));
         document.add(spacer());
     }
@@ -311,25 +369,47 @@ public class DocumentPdfService {
         }
     }
 
+    private PdfPTable newGstItemTable() throws DocumentException {
+        PdfPTable table = new PdfPTable(7);
+        table.setWidthPercentage(100);
+        table.setWidths(new float[]{2.6f, 1.0f, 0.9f, 1.2f, 1.3f, 1.1f, 1.4f});
+        return table;
+    }
+
     private void addTotals(
         Document document,
-        String currencyCode,
+        Business business,
         BigDecimal totalAmount,
+        BigDecimal taxableAmount,
+        BigDecimal cgstAmount,
+        BigDecimal sgstAmount,
+        BigDecimal igstAmount,
         BigDecimal returnedAmount,
         BigDecimal netAmount,
         BigDecimal amountPaid,
         BigDecimal outstanding
     ) throws DocumentException {
+        String currencyCode = business.getCurrencyCode();
         PdfPTable totals = new PdfPTable(2);
         totals.setWidthPercentage(50);
         totals.setHorizontalAlignment(Element.ALIGN_RIGHT);
         totals.setWidths(new float[]{1.4f, 1.4f});
+        if (business.isGstEnabled()) {
+            addTotalRow(totals, "Taxable", formatMoney(taxableAmount, currencyCode));
+            addTotalRow(totals, "CGST", formatMoney(cgstAmount, currencyCode));
+            addTotalRow(totals, "SGST", formatMoney(sgstAmount, currencyCode));
+            addTotalRow(totals, "IGST", formatMoney(igstAmount, currencyCode));
+        }
         addTotalRow(totals, "Total", formatMoney(totalAmount, currencyCode));
         addTotalRow(totals, "Returned", formatMoney(returnedAmount, currencyCode));
         addTotalRow(totals, "Net", formatMoney(netAmount, currencyCode));
         addTotalRow(totals, "Paid", formatMoney(amountPaid, currencyCode));
         addTotalRow(totals, "Outstanding", formatMoney(outstanding, currencyCode));
         document.add(totals);
+    }
+
+    private String blankToDash(String value) {
+        return value == null || value.isBlank() ? "-" : value;
     }
 
     private void addTotalRow(PdfPTable table, String label, String value) {

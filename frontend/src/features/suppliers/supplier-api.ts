@@ -1,4 +1,5 @@
 import { httpClient } from "@/api/http-client";
+import { withPaging, type PageRequest, type PagedResult } from "@/api/paging";
 import type { PurchaseRecord } from "@/features/purchases/purchase-api";
 
 export type SupplierPayload = {
@@ -38,9 +39,9 @@ export type SupplierSummary = {
 
 export async function listSuppliers(
   businessId: string,
-  options: { search?: string; includeArchived?: boolean } = {},
+  options: { search?: string; includeArchived?: boolean } & PageRequest = {},
 ) {
-  const params = new URLSearchParams();
+  const params = withPaging(new URLSearchParams(), options);
 
   if (options.search?.trim()) {
     params.set("search", options.search.trim());
@@ -50,9 +51,7 @@ export async function listSuppliers(
     params.set("includeArchived", "true");
   }
 
-  const query = params.toString();
-
-  return httpClient<SupplierRecord[]>(`/suppliers${query ? `?${query}` : ""}`, {
+  return httpClient<PagedResult<SupplierRecord>>(`/suppliers?${params.toString()}`, {
     businessId,
   });
 }
@@ -85,6 +84,13 @@ export async function updateSupplier(
 
 export async function archiveSupplier(businessId: string, supplierId: string) {
   return httpClient<SupplierRecord>(`/suppliers/${supplierId}/archive`, {
+    method: "PATCH",
+    businessId,
+  });
+}
+
+export async function unarchiveSupplier(businessId: string, supplierId: string) {
+  return httpClient<SupplierRecord>(`/suppliers/${supplierId}/unarchive`, {
     method: "PATCH",
     businessId,
   });

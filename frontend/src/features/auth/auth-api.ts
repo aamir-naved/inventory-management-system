@@ -21,7 +21,7 @@ export type UpdateProfilePayload = {
   newPassword?: string;
 };
 
-type AuthResponse = {
+export type AuthResponse = {
   accessToken: string;
   tokenType: string;
   expiresAt: string;
@@ -34,7 +34,7 @@ type MessageResponse = {
   message: string;
 };
 
-function mapAuthResponse(response: AuthResponse, preserveRefresh = false): AuthSession {
+export function mapAuthResponse(response: AuthResponse, preserveRefresh = false): AuthSession {
   const existing = preserveRefresh ? readStoredAuthSession() : null;
   const refreshToken =
     response.refreshToken ?? (preserveRefresh ? existing?.refreshToken ?? null : null);
@@ -48,10 +48,17 @@ function mapAuthResponse(response: AuthResponse, preserveRefresh = false): AuthS
     expiresAt: response.expiresAt,
     refreshToken,
     refreshExpiresAt,
-    user: {
-      ...response.user,
-      emailVerified: Boolean(response.user.emailVerified),
-    },
+      user: {
+        ...response.user,
+        email: response.user.email ?? null,
+        phone: response.user.phone ?? null,
+        emailVerified: Boolean(response.user.emailVerified),
+        platformRole: response.user.platformRole === "PLATFORM_ADMIN" ? "PLATFORM_ADMIN" : null,
+        role:
+          response.user.platformRole === "PLATFORM_ADMIN"
+            ? null
+            : response.user.role ?? existing?.user.role ?? null,
+      },
   };
 }
 
@@ -134,4 +141,27 @@ export async function updateProfile(payload: UpdateProfilePayload) {
   });
 
   return mapAuthResponse(response, !response.refreshToken);
+}
+
+export async function getPublicConfig() {
+  return httpClient<{ openRegistration: boolean }>("/auth/public-config", {
+    skipAuthRefresh: true,
+  });
+}
+
+export async function requestPhoneOtp(phone: string) {
+  return httpClient<MessageResponse>("/auth/otp/request", {
+    method: "POST",
+    body: { phone },
+    skipAuthRefresh: true,
+  });
+}
+
+export async function verifyPhoneOtp(phone: string, code: string) {
+  const response = await httpClient<AuthResponse>("/auth/otp/verify", {
+    method: "POST",
+    body: { phone, code },
+    skipAuthRefresh: true,
+  });
+  return mapAuthResponse(response);
 }

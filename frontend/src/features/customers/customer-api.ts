@@ -1,4 +1,5 @@
 import { httpClient } from "@/api/http-client";
+import { withPaging, type PageRequest, type PagedResult } from "@/api/paging";
 import type { SaleRecord } from "@/features/sales/sales-api";
 
 export type CustomerPayload = {
@@ -38,9 +39,9 @@ export type CustomerSummary = {
 
 export async function listCustomers(
   businessId: string,
-  options: { search?: string; includeArchived?: boolean } = {},
+  options: { search?: string; includeArchived?: boolean } & PageRequest = {},
 ) {
-  const params = new URLSearchParams();
+  const params = withPaging(new URLSearchParams(), options);
 
   if (options.search?.trim()) {
     params.set("search", options.search.trim());
@@ -50,9 +51,7 @@ export async function listCustomers(
     params.set("includeArchived", "true");
   }
 
-  const query = params.toString();
-
-  return httpClient<CustomerRecord[]>(`/customers${query ? `?${query}` : ""}`, {
+  return httpClient<PagedResult<CustomerRecord>>(`/customers?${params.toString()}`, {
     businessId,
   });
 }
@@ -85,6 +84,13 @@ export async function updateCustomer(
 
 export async function archiveCustomer(businessId: string, customerId: string) {
   return httpClient<CustomerRecord>(`/customers/${customerId}/archive`, {
+    method: "PATCH",
+    businessId,
+  });
+}
+
+export async function unarchiveCustomer(businessId: string, customerId: string) {
+  return httpClient<CustomerRecord>(`/customers/${customerId}/unarchive`, {
     method: "PATCH",
     businessId,
   });

@@ -53,9 +53,9 @@ class InventoryControllerTest extends AuthenticatedControllerTestSupport {
                 .header("X-Business-Id", businessId)
                 .param("lowStockOnly", "true"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(1))
-            .andExpect(jsonPath("$[0].productName").value("Red Bricks"))
-            .andExpect(jsonPath("$[0].lowStock").value(true));
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].productName").value("Red Bricks"))
+            .andExpect(jsonPath("$.items[0].lowStock").value(true));
     }
 
     @Test
@@ -82,15 +82,15 @@ class InventoryControllerTest extends AuthenticatedControllerTestSupport {
                 .header("Authorization", authorizationHeader)
                 .header("X-Business-Id", businessId))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].currentStock").value(100.0));
+            .andExpect(jsonPath("$.items[0].currentStock").value(100.0));
 
         mockMvc.perform(get("/inventory/movements")
                 .header("Authorization", authorizationHeader)
                 .header("X-Business-Id", businessId)
                 .param("productId", productId))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(2))
-            .andExpect(jsonPath("$[0].movementType").value("MANUAL_ADJUSTMENT"));
+            .andExpect(jsonPath("$.items.length()").value(2))
+            .andExpect(jsonPath("$.items[0].movementType").value("MANUAL_ADJUSTMENT"));
     }
 
     @Test
@@ -111,6 +111,25 @@ class InventoryControllerTest extends AuthenticatedControllerTestSupport {
                     """.formatted(productId)))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.message").value("Stock cannot go below zero"));
+    }
+
+    @Test
+    void paginatesLowStockInventoryWithoutInMemoryFilter() throws Exception {
+        createProduct("Alpha Cement", "CEM-A", "Cement", 5.000, 10.000);
+        createProduct("Beta Bricks", "BRK-B", "Bricks", 20.000, 5.000);
+        createProduct("Gamma Steel", "STL-G", "Steel", 2.000, 8.000);
+
+        mockMvc.perform(get("/inventory")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .param("lowStockOnly", "true")
+                .param("size", "1")
+                .param("page", "0"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].lowStock").value(true))
+            .andExpect(jsonPath("$.totalItems").value(2))
+            .andExpect(jsonPath("$.totalPages").value(2));
     }
 
     private String createProduct(

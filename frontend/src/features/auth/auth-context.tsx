@@ -10,8 +10,10 @@ import {
   login as loginRequest,
   logoutRequest,
   register as registerRequest,
+  requestPhoneOtp,
   resendVerification as resendVerificationRequest,
   updateProfile as updateProfileRequest,
+  verifyPhoneOtp,
   type LoginPayload,
   type RegisterPayload,
   type UpdateProfilePayload,
@@ -28,6 +30,9 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   session: SessionUser | null;
   login: (input: LoginPayload) => Promise<void>;
+  requestOtp: (phone: string) => Promise<string>;
+  verifyOtp: (phone: string, code: string) => Promise<void>;
+  applySession: (session: AuthSession) => Promise<void>;
   register: (input: RegisterPayload) => Promise<void>;
   updateBusinessSession: (business: { id: string; name: string }) => void;
   updateProfile: (input: UpdateProfilePayload) => Promise<void>;
@@ -63,6 +68,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
     session: authSession?.user ?? null,
     login: async (input: LoginPayload) => {
       await syncSession(await loginRequest(input));
+    },
+    requestOtp: async (phone: string) => {
+      const response = await requestPhoneOtp(phone);
+      return response.message;
+    },
+    verifyOtp: async (phone: string, code: string) => {
+      await syncSession(await verifyPhoneOtp(phone, code));
+    },
+    applySession: async (session: AuthSession) => {
+      await syncSession(session);
     },
     register: async (input: RegisterPayload) => {
       await syncSession(await registerRequest(input));

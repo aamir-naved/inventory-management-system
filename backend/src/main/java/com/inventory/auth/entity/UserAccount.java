@@ -12,8 +12,11 @@ public class UserAccount extends AuditableEntity {
     @Column(name = "full_name", nullable = false, length = 120)
     private String fullName;
 
-    @Column(name = "email", nullable = false, unique = true, length = 255)
+    @Column(name = "email", unique = true, length = 255)
     private String email;
+
+    @Column(name = "phone", unique = true, length = 20)
+    private String phone;
 
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
@@ -23,6 +26,9 @@ public class UserAccount extends AuditableEntity {
 
     @Column(name = "active", nullable = false)
     private boolean active = true;
+
+    @Column(name = "platform_role", length = 30)
+    private String platformRole;
 
     public String getFullName() {
         return fullName;
@@ -38,6 +44,14 @@ public class UserAccount extends AuditableEntity {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
     }
 
     public String getPasswordHash() {
@@ -62,5 +76,17 @@ public class UserAccount extends AuditableEntity {
 
     public void setActive(boolean active) {
         this.active = active;
+    }
+
+    public String getPlatformRole() {
+        return platformRole;
+    }
+
+    public void setPlatformRole(String platformRole) {
+        this.platformRole = platformRole;
+    }
+
+    public boolean isPlatformAdmin() {
+        return PlatformRole.isPlatformAdmin(platformRole);
     }
 }

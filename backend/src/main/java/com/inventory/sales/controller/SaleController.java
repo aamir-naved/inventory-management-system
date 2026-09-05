@@ -1,5 +1,6 @@
 package com.inventory.sales.controller;
 
+import com.inventory.common.api.PagedResponse;
 import com.inventory.sales.dto.*;
 import com.inventory.sales.service.SaleService;
 import jakarta.validation.Valid;
@@ -8,7 +9,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -28,8 +28,12 @@ public class SaleController {
     }
 
     @GetMapping
-    public List<SaleResponse> list(@RequestParam(required = false) String search) {
-        return saleService.list(search);
+    public PagedResponse<SaleResponse> list(
+        @RequestParam(required = false) String search,
+        @RequestParam(required = false) Integer page,
+        @RequestParam(required = false) Integer size
+    ) {
+        return saleService.list(search, page, size);
     }
 
     @GetMapping("/{id}")

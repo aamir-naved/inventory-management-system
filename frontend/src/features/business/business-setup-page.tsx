@@ -5,7 +5,9 @@ import { ApiError } from "@/api/http-client";
 import {
   createBusiness,
   getBusiness,
+  removeBusinessLogo,
   updateBusiness,
+  uploadBusinessLogo,
   type BusinessPayload,
 } from "@/features/business/business-api";
 import { useAuth } from "@/features/auth/auth-context";
@@ -17,6 +19,11 @@ const initialForm: BusinessPayload = {
   mobileNumber: "",
   currencyCode: "INR",
   timeZone: "Asia/Kolkata",
+  gstEnabled: false,
+  gstin: "",
+  stateCode: "",
+  stateName: "",
+  gstInclusivePricing: false,
 };
 
 export function BusinessSetupPage() {
@@ -40,6 +47,11 @@ export function BusinessSetupPage() {
         mobileNumber: businessQuery.data.mobileNumber,
         currencyCode: businessQuery.data.currencyCode,
         timeZone: businessQuery.data.timeZone,
+        gstEnabled: businessQuery.data.gstEnabled,
+        gstin: businessQuery.data.gstin ?? "",
+        stateCode: businessQuery.data.stateCode ?? "",
+        stateName: businessQuery.data.stateName ?? "",
+        gstInclusivePricing: businessQuery.data.gstInclusivePricing,
       });
     }
   }, [businessQuery.data]);
@@ -90,16 +102,16 @@ export function BusinessSetupPage() {
         <span className="brand-kicker">Business setup</span>
         <h1>Set up the business that this workspace belongs to.</h1>
         <p>
-          This is the first real product flow: create the business profile, lock
-          in the tenant identity, and reuse it across future modules.
+          Create your shop profile once. Products, stock, purchases, and sales
+          all use these details.
         </p>
       </section>
 
       <section className="panel">
         <h3>{session?.businessId ? "Update business details" : "Create your business profile"}</h3>
         <p>
-          These fields match the MVP setup document: name, type, address, mobile,
-          currency, and time zone.
+          Enter the name, type, address, mobile, currency, and time zone for
+          your business.
         </p>
 
         <form className="form-stack" onSubmit={handleSubmit}>
@@ -180,6 +192,96 @@ export function BusinessSetupPage() {
               ) : null}
             </div>
           </div>
+
+          <label className="toggle">
+            <input
+              id="gstEnabled"
+              type="checkbox"
+              checked={Boolean(form.gstEnabled)}
+              onChange={(event) => updateField("gstEnabled", event.target.checked)}
+            />
+            <span>Enable GST on invoices and bills</span>
+          </label>
+
+          {form.gstEnabled ? (
+            <>
+              <div className="field">
+                <label htmlFor="gstin">GSTIN</label>
+                <input
+                  id="gstin"
+                  value={form.gstin ?? ""}
+                  maxLength={15}
+                  onChange={(event) => updateField("gstin", event.target.value.toUpperCase())}
+                  placeholder="22AAAAA0000A1Z5"
+                />
+              </div>
+              <div className="split-grid">
+                <div className="field">
+                  <label htmlFor="stateCode">State code</label>
+                  <input
+                    id="stateCode"
+                    value={form.stateCode ?? ""}
+                    maxLength={2}
+                    onChange={(event) => updateField("stateCode", event.target.value.toUpperCase())}
+                    placeholder="29"
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="stateName">State</label>
+                  <input
+                    id="stateName"
+                    value={form.stateName ?? ""}
+                    onChange={(event) => updateField("stateName", event.target.value)}
+                    placeholder="Karnataka"
+                  />
+                </div>
+              </div>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={Boolean(form.gstInclusivePricing)}
+                  onChange={(event) => updateField("gstInclusivePricing", event.target.checked)}
+                />
+                <span>Prices include GST</span>
+              </label>
+            </>
+          ) : null}
+
+          {session?.businessId ? (
+            <div className="field">
+              <label htmlFor="logo">Shop logo (PNG or JPEG, 512 KB)</label>
+              <input
+                id="logo"
+                type="file"
+                accept="image/png,image/jpeg"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file && session.businessId) {
+                    void uploadBusinessLogo(session.businessId, file).then((business) => {
+                      updateBusinessSession({ id: business.id, name: business.name });
+                      setFeedback("Logo uploaded. It will appear on invoices.");
+                    });
+                  }
+                }}
+              />
+              {businessQuery.data?.hasLogo ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => {
+                    if (session.businessId) {
+                      void removeBusinessLogo(session.businessId).then(() => {
+                        setFeedback("Logo removed.");
+                        void businessQuery.refetch();
+                      });
+                    }
+                  }}
+                >
+                  Remove logo
+                </button>
+              ) : null}
+            </div>
+          ) : null}
 
           {feedback ? <p className="inline-note">{feedback}</p> : null}
           {businessQuery.isLoading ? <p className="inline-note">Loading business details...</p> : null}

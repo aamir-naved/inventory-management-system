@@ -8,6 +8,11 @@ public record SettingsResponse(
     String currencyCode,
     String dateFormat,
     boolean allowNegativeStock,
-    BigDecimal defaultLowStockThreshold
+    BigDecimal defaultLowStockThreshold,
+    boolean gstEnabled,
+    String gstin,
+    String stateCode,
+    String stateName,
+    boolean gstInclusivePricing
 ) {
 }

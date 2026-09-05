@@ -24,6 +24,8 @@ public record PurchaseRequest(
     @Size(max = 255, message = "Notes must be 255 characters or fewer")
     String notes,
 
+    Boolean interstate,
+
     @NotEmpty(message = "At least one purchase item is required")
     List<@Valid PurchaseItemRequest> items
 ) {

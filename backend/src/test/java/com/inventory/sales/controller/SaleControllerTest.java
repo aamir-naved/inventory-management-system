@@ -56,7 +56,7 @@ class SaleControllerTest extends AuthenticatedControllerTestSupport {
 
         mockMvc.perform(get("/inventory").header("Authorization", authorizationHeader).header("X-Business-Id", businessId))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].currentStock").value(100.0));
+            .andExpect(jsonPath("$.items[0].currentStock").value(100.0));
     }
 
     @Test
@@ -103,7 +103,40 @@ class SaleControllerTest extends AuthenticatedControllerTestSupport {
 
         mockMvc.perform(get("/inventory").header("Authorization", authorizationHeader).header("X-Business-Id", businessId))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].currentStock").value(120.0));
+            .andExpect(jsonPath("$.items[0].currentStock").value(120.0));
+    }
+
+    @Test
+    void paginatesSaleList() throws Exception {
+        String customerId = createCustomer();
+        String productId = createProduct();
+
+        for (int day = 1; day <= 3; day++) {
+            mockMvc.perform(post("/sales")
+                    .header("Authorization", authorizationHeader)
+                    .header("X-Business-Id", businessId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""
+                        {
+                          "customerId":"%s",
+                          "saleDate":"2026-08-0%d",
+                          "amountPaid":0,
+                          "notes":"Sale %d",
+                          "items":[{"productId":"%s","quantity":1.000,"sellingPrice":360.00}]
+                        }
+                        """.formatted(customerId, day, day, productId)))
+                .andExpect(status().isCreated());
+        }
+
+        mockMvc.perform(get("/sales")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .param("size", "2")
+                .param("page", "0"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(2))
+            .andExpect(jsonPath("$.totalItems").value(3))
+            .andExpect(jsonPath("$.totalPages").value(2));
     }
 
     private String createCustomer() throws Exception {

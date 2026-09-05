@@ -19,6 +19,9 @@ Each Epic contains Features.
 
 Each Feature can later be broken into Development Tasks.
 
+For what is already built in code, see [06-as-built-technical.md](06-as-built-technical.md).
+For the gap to a pilot-usable product (including ops), see [07-path-to-usable-product.md](07-path-to-usable-product.md).
+
 Priority Levels:
 
 * P0 = Critical (Must Have)
@@ -58,12 +61,12 @@ Priority: P0
 
 ### Features
 
-* [ ] Create Business
-* [ ] Update Business
+* [x] Create Business
+* [x] Update Business
 * [x] Business Settings
 * [x] Currency
-* [ ] Time Zone
-* [ ] Business Logo
+* [x] Time Zone
+* [x] Business Logo
 
 ---
 
@@ -73,16 +76,24 @@ Priority: P0
 
 ### Features
 
-* [ ] Create Product
-* [ ] Edit Product
-* [ ] Archive Product
-* [ ] Search Product
-* [ ] Product Categories
-* [ ] Product Units
-* [ ] Cost Price
-* [ ] Selling Price
-* [ ] Opening Stock
+* [x] Create Product
+* [x] Edit Product
+* [x] Archive Product
+* [x] Unarchive Product
+* [x] Search Product
+* [x] Product Categories
+* [x] Product Units
+* [x] Cost Price
+* [x] Selling Price
+* [x] Opening Stock
+* [x] Excel Import
+* [x] Excel Export
 * [ ] Product Image
+
+Notes:
+
+* Categories and units are free-text fields on the product (with unit presets in the UI), not separate master-data APIs. That is the shipped shop model.
+* Excel import/export is implemented for products (Phase 2 work started early).
 
 ---
 
@@ -92,12 +103,12 @@ Priority: P0
 
 ### Features
 
-* [ ] Current Stock
-* [ ] Stock Adjustment
-* [ ] Stock Movement History
-* [ ] Inventory Valuation
-* [ ] Low Stock Alert
-* [ ] Stock Search
+* [x] Current Stock
+* [x] Stock Adjustment
+* [x] Stock Movement History
+* [x] Inventory Valuation
+* [x] Low Stock Alert
+* [x] Stock Search
 
 ---
 
@@ -110,6 +121,7 @@ Priority: P0
 * [x] Create Supplier
 * [x] Update Supplier
 * [x] Archive Supplier
+* [x] Unarchive Supplier
 * [x] Supplier Search
 * [x] Supplier Purchase History
 
@@ -124,6 +136,7 @@ Priority: P0
 * [x] Create Customer
 * [x] Update Customer
 * [x] Archive Customer
+* [x] Unarchive Customer
 * [x] Customer Search
 * [x] Outstanding Balance
 * [x] Purchase History
@@ -136,12 +149,14 @@ Priority: P0
 
 ### Features
 
-* [ ] Create Purchase
-* [ ] Purchase Details
-* [ ] Purchase History
-* [ ] Purchase Notes
-* [ ] Purchase Payment Status
-* [ ] Purchase Cancellation
+* [x] Create Purchase
+* [x] Purchase Details
+* [x] Purchase History
+* [x] Purchase Notes
+* [x] Purchase Payment Status
+* [x] Purchase Cancellation
+* [x] Purchase Returns
+* [x] Purchase Bill PDF
 
 Business Rule:
 
@@ -155,12 +170,14 @@ Priority: P0
 
 ### Features
 
-* [ ] Create Sale
-* [ ] Sale Details
-* [ ] Sale History
-* [ ] Sale Notes
-* [ ] Sale Payment Status
-* [ ] Sale Cancellation
+* [x] Create Sale
+* [x] Sale Details
+* [x] Sale History
+* [x] Sale Notes
+* [x] Sale Payment Status
+* [x] Sale Cancellation
+* [x] Sale Returns
+* [x] Sale Invoice PDF
 
 Business Rule:
 
@@ -218,6 +235,11 @@ Priority: P0
 * [x] Sales Report
 * [x] Customer Outstanding
 * [x] Supplier Outstanding
+* [x] Report File Export (Excel / PDF)
+
+Notes:
+
+* On-screen reports plus Excel download (inventory, sales, purchases, dues, GST). Sale/purchase PDFs are separate document endpoints.
 
 ---
 
@@ -241,9 +263,9 @@ Priority: P1
 
 ### Features
 
-* [ ] View Activity Log
+* [x] View Activity Log
 * [ ] Search Activity
-* [ ] User Activity Timeline
+* [x] User Activity Timeline
 
 ---
 
@@ -253,11 +275,43 @@ Priority: P1
 
 ### Features
 
-* [ ] Low Stock Notification
-* [ ] Payment Reminder
-* [ ] Dashboard Alerts
+* [x] Low Stock Notification
+* [x] Payment Reminder
+* [x] Dashboard Alerts
 
 ---
+
+# EPIC 15 — Pilot packaging (ops)
+
+Priority: P0
+
+Not a user-facing shop feature, but it blocks a real pilot. Tracked here so it is planned like everything else. Detail: [07-path-to-usable-product.md](07-path-to-usable-product.md).
+
+### Features
+
+* [x] README and onboarding (env vars, Compose, host-dev, docs 01–07)
+* [x] Runnable Docker Compose (Postgres + backend + frontend)
+* [x] Frontend nginx SPA fallback and `/api` reverse proxy
+* [x] Makefile `up` / `down` / `logs` / `test` / `backup` / `prod`
+* [x] Production-safe configuration (required JWT secret, SMTP, prod profile)
+* [x] CI (backend tests + frontend tests and build on PR)
+* [x] First-user copy polish
+* [x] HTTPS overlay (Caddy) and host-closed Postgres in prod Compose
+* [x] Database backup / restore scripts
+* [x] MIT license
+
+---
+
+# EPIC 16 — Shop volume
+
+Priority: P1
+
+Needed so a catalog of hundreds or thousands of SKUs does not download in one payload.
+
+### Features
+
+* [x] Pagination + indexed search on list APIs/UI
+
 
 # FUTURE EPICS (Not MVP)
 
@@ -265,8 +319,8 @@ Priority: P2 / P3
 
 ## Barcode
 
-* [ ] Barcode Generation
-* [ ] Barcode Scanning
+* [x] Barcode lookup / scanning at the counter
+* [ ] Barcode label generation (print sheets) — not required for daily sales
 
 ## Multi-Warehouse
 
@@ -275,9 +329,15 @@ Priority: P2 / P3
 
 ## GST
 
-* [ ] GST Invoices
-* [ ] GST Reports
+* [x] GST Invoices
+* [x] GST Reports
 * [ ] E-Way Bill
+
+## Employee Management
+
+* [x] Roles
+* [x] Permissions
+* [ ] Attendance
 
 ## AI
 
@@ -307,12 +367,6 @@ Priority: P2 / P3
 
 * [ ] Android App
 * [ ] iOS App
-
-## Employee Management
-
-* [ ] Roles
-* [ ] Permissions
-* [ ] Attendance
 
 ---
 
@@ -349,15 +403,12 @@ Introduce AI-powered capabilities.
 
 # Current Sprint Goal
 
-**Replace the paper inventory register with a simple, reliable digital system that a real shop owner can use every day.**
+**Self-hosted Indian shop product is in tree.** GST, staff roles, barcode counter, report Excel, logo PDFs, alerts, activity log, HTTPS overlay, and backups are implemented. See [07-path-to-usable-product.md](docs/07-path-to-usable-product.md).
 
-## One improvement before coding
+As-built: [06-as-built-technical.md](docs/06-as-built-technical.md).
 
-I suggest we split this backlog into **Business Features** and **Technical Foundation**. For example:
+## Status note (synced with codebase)
 
-* Business Features: Products, Purchases, Sales, Inventory.
-* Technical Foundation: Authentication, Security, Database, API Standards, Logging, Testing, Deployment.
+P0 shop loop, P1 staff/audit/alerts/pagination, and India GST/barcode/report-export are done. Still open by choice: product images, e-way bill, attendance, native apps, WhatsApp, AI. Category/unit remain free-text.
 
-This separation makes sprint planning much easier because you'll always know whether you're building user value or infrastructure.
-
-After this, I recommend we **skip any more high-level documentation** and move to **Document 4: System Architecture**, followed immediately by database design and project setup. That gets us into implementation quickly while still keeping the project organized.
+Ops: README + Compose + nginx + Caddy prod overlay + backup scripts + MIT + CI (backend tests, frontend tests + build).

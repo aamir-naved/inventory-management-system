@@ -1,10 +1,12 @@
 package com.inventory.supplier.repository;
 
 import com.inventory.supplier.entity.Supplier;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -24,5 +26,10 @@ public interface SupplierRepository extends JpaRepository<Supplier, UUID> {
           )
         order by s.archived asc, s.name asc
         """)
-    List<Supplier> search(UUID businessId, String searchTerm, boolean includeArchived);
+    Page<Supplier> search(
+        @Param("businessId") UUID businessId,
+        @Param("searchTerm") String searchTerm,
+        @Param("includeArchived") boolean includeArchived,
+        Pageable pageable
+    );
 }

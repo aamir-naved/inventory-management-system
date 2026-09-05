@@ -13,8 +13,10 @@ import com.inventory.auth.repository.UserAccountRepository;
 import com.inventory.auth.security.CurrentUser;
 import com.inventory.business.dto.BusinessRequest;
 import com.inventory.business.dto.BusinessResponse;
+import com.inventory.business.dto.QuickStartRequest;
 import com.inventory.business.entity.Business;
 import com.inventory.business.repository.BusinessRepository;
+import com.inventory.config.RegistrationPolicy;
 
 import jakarta.persistence.EntityNotFoundException;
 
@@ -26,20 +28,45 @@ public class BusinessService {
     private final BusinessMembershipRepository businessMembershipRepository;
     private final UserAccountRepository userAccountRepository;
     private final CurrentUser currentUser;
+    private final ShopOnboardingService shopOnboardingService;
+    private final RegistrationPolicy registrationPolicy;
 
     public BusinessService(
         BusinessRepository businessRepository,
         BusinessMembershipRepository businessMembershipRepository,
         UserAccountRepository userAccountRepository,
-        CurrentUser currentUser
+        CurrentUser currentUser,
+        ShopOnboardingService shopOnboardingService,
+        RegistrationPolicy registrationPolicy
     ) {
         this.businessRepository = businessRepository;
         this.businessMembershipRepository = businessMembershipRepository;
         this.userAccountRepository = userAccountRepository;
         this.currentUser = currentUser;
+        this.shopOnboardingService = shopOnboardingService;
+        this.registrationPolicy = registrationPolicy;
+    }
+
+    public BusinessResponse quickStart(QuickStartRequest request) {
+        BusinessResponse created = create(new BusinessRequest(
+            request.shopName(),
+            "Shop",
+            null,
+            request.mobileNumber(),
+            "INR",
+            "Asia/Kolkata",
+            false,
+            null,
+            null,
+            null,
+            false
+        ));
+        shopOnboardingService.provisionNewShop(created.id(), currentUser.requireUserId());
+        return created;
     }
 
     public BusinessResponse create(BusinessRequest request) {
+        registrationPolicy.requireOpenSelfServe("Self-serve shop creation is disabled. Ask the operator to create your shop.");
         UUID userId = currentUser.requireUserId();
         if (businessMembershipRepository.existsByUser_IdAndActiveTrue(userId)) {
             throw new IllegalArgumentException("This account already has a business");
@@ -51,6 +78,7 @@ public class BusinessService {
         business.setDefaultLowStockThreshold(BigDecimal.ZERO);
         business.setDateFormat("dd/MM/yyyy");
         business.setActive(true);
+        business.setPlanCode("standard");
 
         Business savedBusiness = businessRepository.save(business);
 
@@ -99,6 +127,15 @@ public class BusinessService {
         business.setMobileNumber(request.mobileNumber().trim());
         business.setCurrencyCode(request.currencyCode().trim());
         business.setTimeZone(validateTimeZone(request.timeZone().trim()));
+        if (request.gstEnabled() != null) {
+            business.setGstEnabled(request.gstEnabled());
+        }
+        business.setGstin(normalizeGstin(request.gstin()));
+        business.setStateCode(normalizeStateCode(request.stateCode()));
+        business.setStateName(normalize(request.stateName()));
+        if (request.gstInclusivePricing() != null) {
+            business.setGstInclusivePricing(request.gstInclusivePricing());
+        }
     }
 
     private String normalize(String value) {
@@ -128,9 +165,66 @@ public class BusinessService {
             business.getMobileNumber(),
             business.getCurrencyCode(),
             business.getTimeZone(),
+            business.isGstEnabled(),
+            business.getGstin(),
+            business.getStateCode(),
+            business.getStateName(),
+            business.isGstInclusivePricing(),
+            business.getLogoContentType() != null && business.getLogoBytes() != null,
             business.isActive(),
             business.getCreatedAt(),
             business.getUpdatedAt()
         );
+    }
+
+    private String normalizeGstin(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim().toUpperCase();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String normalizeStateCode(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim().toUpperCase();
+        return normalized.isEmpty() ? null : normalized;
+    }
+
+    public BusinessResponse uploadLogo(UUID id, byte[] bytes, String contentType) {
+        Business business = findOwnedBusiness(id);
+        if (bytes == null || bytes.length == 0) {
+            throw new IllegalArgumentException("Choose a PNG or JPEG logo");
+        }
+        if (bytes.length > 512 * 1024) {
+            throw new IllegalArgumentException("Logo must be 512 KB or smaller");
+        }
+        if (contentType == null || !(contentType.equals("image/png") || contentType.equals("image/jpeg"))) {
+            throw new IllegalArgumentException("Logo must be a PNG or JPEG image");
+        }
+        business.setLogoBytes(bytes);
+        business.setLogoContentType(contentType);
+        return toResponse(business);
+    }
+
+    public void removeLogo(UUID id) {
+        Business business = findOwnedBusiness(id);
+        business.setLogoBytes(null);
+        business.setLogoContentType(null);
+    }
+
+    public byte[] logoBytes(UUID id) {
+        Business business = findOwnedBusiness(id);
+        if (business.getLogoBytes() == null) {
+            throw new EntityNotFoundException("Logo not found");
+        }
+        return business.getLogoBytes();
+    }
+
+    public String logoContentType(UUID id) {
+        Business business = findOwnedBusiness(id);
+        return business.getLogoContentType() == null ? "image/png" : business.getLogoContentType();
     }
 }

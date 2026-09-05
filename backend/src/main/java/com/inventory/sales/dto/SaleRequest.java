@@ -20,6 +20,7 @@ public record SaleRequest(
     BigDecimal amountPaid,
     @Size(max = 255, message = "Notes must be 255 characters or fewer")
     String notes,
+    Boolean interstate,
     @NotEmpty(message = "At least one sale item is required")
     List<@Valid SaleItemRequest> items
 ) {}

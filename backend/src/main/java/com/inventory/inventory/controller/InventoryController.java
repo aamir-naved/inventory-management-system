@@ -1,5 +1,6 @@
 package com.inventory.inventory.controller;
 
+import com.inventory.common.api.PagedResponse;
 import com.inventory.inventory.dto.InventoryAdjustmentRequest;
 import com.inventory.inventory.dto.InventoryMovementResponse;
 import com.inventory.inventory.dto.InventoryStockResponse;
@@ -13,7 +14,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -27,12 +27,14 @@ public class InventoryController {
     }
 
     @GetMapping
-    public List<InventoryStockResponse> listStock(
+    public PagedResponse<InventoryStockResponse> listStock(
         @RequestParam(required = false) String search,
         @RequestParam(defaultValue = "false") boolean lowStockOnly,
-        @RequestParam(defaultValue = "false") boolean includeArchived
+        @RequestParam(defaultValue = "false") boolean includeArchived,
+        @RequestParam(required = false) Integer page,
+        @RequestParam(required = false) Integer size
     ) {
-        return inventoryService.listStock(search, lowStockOnly, includeArchived);
+        return inventoryService.listStock(search, lowStockOnly, includeArchived, page, size);
     }
 
     @GetMapping("/summary")
@@ -41,8 +43,12 @@ public class InventoryController {
     }
 
     @GetMapping("/movements")
-    public List<InventoryMovementResponse> movements(@RequestParam(required = false) UUID productId) {
-        return inventoryService.listMovements(productId);
+    public PagedResponse<InventoryMovementResponse> movements(
+        @RequestParam(required = false) UUID productId,
+        @RequestParam(required = false) Integer page,
+        @RequestParam(required = false) Integer size
+    ) {
+        return inventoryService.listMovements(productId, page, size);
     }
 
     @PostMapping("/adjustments")

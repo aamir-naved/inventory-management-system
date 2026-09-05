@@ -1,5 +1,8 @@
 package com.inventory.purchase.service;
 
+import com.inventory.audit.service.AuditService;
+import com.inventory.common.api.PagedResponse;
+import com.inventory.common.api.Pagination;
 import com.inventory.common.tenant.TenantContext;
 import com.inventory.inventory.entity.InventoryMovement;
 import com.inventory.inventory.repository.InventoryMovementRepository;
@@ -20,6 +23,8 @@ import com.inventory.purchase.repository.PurchaseReturnRepository;
 import com.inventory.settings.service.SettingsService;
 import com.inventory.supplier.entity.Supplier;
 import com.inventory.supplier.repository.SupplierRepository;
+import com.inventory.tax.GstCalculator;
+import com.inventory.tax.GstLine;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,6 +46,7 @@ public class PurchaseService {
     private final InventoryMovementRepository inventoryMovementRepository;
     private final PaymentService paymentService;
     private final SettingsService settingsService;
+    private final AuditService auditService;
 
     public PurchaseService(
         PurchaseRepository purchaseRepository,
@@ -49,7 +55,8 @@ public class PurchaseService {
         ProductRepository productRepository,
         InventoryMovementRepository inventoryMovementRepository,
         PaymentService paymentService,
-        SettingsService settingsService
+        SettingsService settingsService,
+        AuditService auditService
     ) {
         this.purchaseRepository = purchaseRepository;
         this.purchaseReturnRepository = purchaseReturnRepository;
@@ -58,6 +65,7 @@ public class PurchaseService {
         this.inventoryMovementRepository = inventoryMovementRepository;
         this.paymentService = paymentService;
         this.settingsService = settingsService;
+        this.auditService = auditService;
     }
 
     public PurchaseResponse create(PurchaseRequest request) {
@@ -73,9 +81,17 @@ public class PurchaseService {
         purchase.setPaymentStatus(PaymentAmounts.STATUS_PENDING);
         purchase.setNotes(normalize(request.notes()));
         purchase.setCancelled(false);
+        boolean interstate = Boolean.TRUE.equals(request.interstate());
+        purchase.setInterstate(interstate);
+        boolean gstEnabled = settingsService.isGstEnabled();
+        boolean inclusive = settingsService.isGstInclusivePricing();
 
         List<PurchaseItem> items = new ArrayList<>();
         BigDecimal totalAmount = BigDecimal.ZERO;
+        BigDecimal taxableTotal = BigDecimal.ZERO;
+        BigDecimal cgstTotal = BigDecimal.ZERO;
+        BigDecimal sgstTotal = BigDecimal.ZERO;
+        BigDecimal igstTotal = BigDecimal.ZERO;
 
         for (PurchaseItemRequest itemRequest : request.items()) {
             Product product = findProduct(itemRequest.productId(), businessId);
@@ -84,14 +100,35 @@ public class PurchaseService {
                 throw new IllegalArgumentException("Archived products cannot be purchased");
             }
 
+            BigDecimal rate = gstEnabled
+                ? GstCalculator.normalizeRate(itemRequest.gstRate() != null ? itemRequest.gstRate() : product.getGstRate())
+                : BigDecimal.ZERO;
+            GstLine tax = GstCalculator.compute(
+                itemRequest.quantity(),
+                itemRequest.purchasePrice(),
+                rate,
+                inclusive,
+                interstate
+            );
+
             PurchaseItem item = new PurchaseItem();
             item.setPurchase(purchase);
             item.setProduct(product);
             item.setQuantity(itemRequest.quantity());
             item.setUnitCost(itemRequest.purchasePrice());
-            item.setLineTotal(itemRequest.quantity().multiply(itemRequest.purchasePrice()));
+            item.setHsnCode(product.getHsnCode());
+            item.setGstRate(tax.gstRate());
+            item.setTaxableAmount(tax.taxableAmount());
+            item.setCgstAmount(tax.cgstAmount());
+            item.setSgstAmount(tax.sgstAmount());
+            item.setIgstAmount(tax.igstAmount());
+            item.setLineTotal(tax.lineTotal());
             items.add(item);
             totalAmount = totalAmount.add(item.getLineTotal());
+            taxableTotal = taxableTotal.add(tax.taxableAmount());
+            cgstTotal = cgstTotal.add(tax.cgstAmount());
+            sgstTotal = sgstTotal.add(tax.sgstAmount());
+            igstTotal = igstTotal.add(tax.igstAmount());
         }
 
         BigDecimal initialPaid = request.amountPaid() == null ? BigDecimal.ZERO : request.amountPaid();
@@ -104,6 +141,10 @@ public class PurchaseService {
 
         purchase.setItems(items);
         purchase.setTotalAmount(totalAmount);
+        purchase.setTaxableAmount(taxableTotal);
+        purchase.setCgstAmount(cgstTotal);
+        purchase.setSgstAmount(sgstTotal);
+        purchase.setIgstAmount(igstTotal);
 
         Purchase savedPurchase = purchaseRepository.save(purchase);
 
@@ -132,15 +173,25 @@ public class PurchaseService {
             );
         }
 
+        auditService.record(
+            "PURCHASE_CREATED",
+            "PURCHASE",
+            savedPurchase.getId(),
+            "Purchase " + savedPurchase.getPurchaseNumber() + " from " + supplier.getName()
+        );
         return toResponse(savedPurchase);
     }
 
     @Transactional(readOnly = true)
-    public List<PurchaseResponse> list(String search) {
-        return purchaseRepository.search(requireBusinessId(), normalizeSearch(search))
-            .stream()
-            .map(this::toResponse)
-            .toList();
+    public PagedResponse<PurchaseResponse> list(String search, Integer page, Integer size) {
+        return Pagination.map(
+            purchaseRepository.search(
+                requireBusinessId(),
+                normalizeSearch(search),
+                Pagination.pageable(page, size)
+            ),
+            this::toResponse
+        );
     }
 
     @Transactional(readOnly = true)
@@ -218,6 +269,12 @@ public class PurchaseService {
 
         purchase.setCancelled(true);
         purchase.setCancellationReason(request.reason().trim());
+        auditService.record(
+            "PURCHASE_CANCELLED",
+            "PURCHASE",
+            purchase.getId(),
+            "Cancelled purchase " + purchase.getPurchaseNumber()
+        );
         return toResponse(purchase);
     }
 
@@ -309,6 +366,11 @@ public class PurchaseService {
             purchase.isCancelled(),
             purchase.getCancellationReason(),
             hasReturns,
+            purchase.isInterstate(),
+            purchase.getTaxableAmount(),
+            purchase.getCgstAmount(),
+            purchase.getSgstAmount(),
+            purchase.getIgstAmount(),
             purchase.getItems().stream()
                 .map(item -> {
                     BigDecimal returnedQuantity = purchaseReturnRepository.sumReturnedQuantityForPurchaseItem(
@@ -323,6 +385,12 @@ public class PurchaseService {
                         item.getQuantity(),
                         item.getUnitCost(),
                         item.getLineTotal(),
+                        item.getHsnCode(),
+                        item.getGstRate(),
+                        item.getTaxableAmount(),
+                        item.getCgstAmount(),
+                        item.getSgstAmount(),
+                        item.getIgstAmount(),
                         returnedQuantity,
                         item.getQuantity().subtract(returnedQuantity)
                     );

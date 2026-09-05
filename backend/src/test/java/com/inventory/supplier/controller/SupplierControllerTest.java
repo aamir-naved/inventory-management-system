@@ -62,8 +62,8 @@ class SupplierControllerTest extends AuthenticatedControllerTestSupport {
                 .header("Authorization", authorizationHeader)
                 .header("X-Business-Id", businessId))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(1))
-            .andExpect(jsonPath("$[0].name").value("Shakti Cements Ltd"));
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].name").value("Shakti Cements Ltd"));
     }
 
     @Test
@@ -92,6 +92,34 @@ class SupplierControllerTest extends AuthenticatedControllerTestSupport {
                 .header("X-Business-Id", businessId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.archived").value(true));
+
+        mockMvc.perform(get("/suppliers")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(0))
+            .andExpect(jsonPath("$.totalItems").value(0));
+
+        mockMvc.perform(get("/suppliers")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .param("includeArchived", "true"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].archived").value(true));
+
+        mockMvc.perform(patch("/suppliers/{id}/unarchive", id)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.archived").value(false));
+
+        mockMvc.perform(get("/suppliers")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].archived").value(false));
     }
 
     @Test
@@ -132,6 +160,23 @@ class SupplierControllerTest extends AuthenticatedControllerTestSupport {
             .andExpect(jsonPath("$.length()").value(3))
             .andExpect(jsonPath("$[?(@.cancelled == true)]").exists())
             .andExpect(jsonPath("$[?(@.outstandingAmount == 2150.0)]").exists());
+    }
+
+    @Test
+    void paginatesSupplierList() throws Exception {
+        createSupplier("Alpha Cements");
+        createSupplier("Beta Steels");
+        createSupplier("Gamma Bricks");
+
+        mockMvc.perform(get("/suppliers")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .param("size", "2")
+                .param("page", "0"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(2))
+            .andExpect(jsonPath("$.totalItems").value(3))
+            .andExpect(jsonPath("$.totalPages").value(2));
     }
 
     private String createSupplier(String name) throws Exception {

@@ -38,6 +38,15 @@ public class Product extends TenantAwareEntity {
     @Column(name = "low_stock_threshold", nullable = false, precision = 19, scale = 3)
     private BigDecimal lowStockThreshold;
 
+    @Column(name = "barcode", length = 64)
+    private String barcode;
+
+    @Column(name = "hsn_code", length = 8)
+    private String hsnCode;
+
+    @Column(name = "gst_rate", nullable = false, precision = 5, scale = 2)
+    private BigDecimal gstRate = BigDecimal.ZERO;
+
     @Column(name = "archived", nullable = false)
     private boolean archived;
 
@@ -111,6 +120,30 @@ public class Product extends TenantAwareEntity {
 
     public void setLowStockThreshold(BigDecimal lowStockThreshold) {
         this.lowStockThreshold = lowStockThreshold;
+    }
+
+    public String getBarcode() {
+        return barcode;
+    }
+
+    public void setBarcode(String barcode) {
+        this.barcode = barcode;
+    }
+
+    public String getHsnCode() {
+        return hsnCode;
+    }
+
+    public void setHsnCode(String hsnCode) {
+        this.hsnCode = hsnCode;
+    }
+
+    public BigDecimal getGstRate() {
+        return gstRate;
+    }
+
+    public void setGstRate(BigDecimal gstRate) {
+        this.gstRate = gstRate;
     }
 
     public boolean isArchived() {

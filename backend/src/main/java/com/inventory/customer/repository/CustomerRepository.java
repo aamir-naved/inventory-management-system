@@ -1,10 +1,12 @@
 package com.inventory.customer.repository;
 
 import com.inventory.customer.entity.Customer;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -24,5 +26,10 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
           )
         order by c.archived asc, c.name asc
         """)
-    List<Customer> search(UUID businessId, String searchTerm, boolean includeArchived);
+    Page<Customer> search(
+        @Param("businessId") UUID businessId,
+        @Param("searchTerm") String searchTerm,
+        @Param("includeArchived") boolean includeArchived,
+        Pageable pageable
+    );
 }

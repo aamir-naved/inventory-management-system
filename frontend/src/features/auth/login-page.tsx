@@ -2,7 +2,10 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 
 import { ApiError } from "@/api/http-client";
+import { getPublicConfig } from "@/features/auth/auth-api";
 import { useAuth } from "@/features/auth/auth-context";
+import { afterAuthPath, readStoredAuthSession } from "@/features/auth/auth-storage";
+import { useQuery } from "@tanstack/react-query";
 
 function EyeIcon({ open }: { open: boolean }) {
   if (open) {
@@ -30,14 +33,7 @@ function EyeIcon({ open }: { open: boolean }) {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle
-        cx="12"
-        cy="12"
-        r="3"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-      />
+      <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   );
 }
@@ -45,8 +41,17 @@ function EyeIcon({ open }: { open: boolean }) {
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login, register } = useAuth();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const { login, register, requestOtp, verifyOtp } = useAuth();
+  const publicConfigQuery = useQuery({
+    queryKey: ["public-config"],
+    queryFn: getPublicConfig,
+  });
+  const openRegistration = publicConfigQuery.data?.openRegistration ?? true;
+  const [mode, setMode] = useState<"otp" | "login" | "register">("otp");
+  const activeMode = mode === "register" && !openRegistration ? "login" : mode;
+  const [phone, setPhone] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
   const [form, setForm] = useState({
     fullName: "",
     email: "",
@@ -64,11 +69,45 @@ export function LoginPage() {
   );
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  function switchMode(nextMode: "login" | "register") {
+  function switchMode(nextMode: "otp" | "login" | "register") {
+    if (nextMode === "register" && !openRegistration) {
+      return;
+    }
     setMode(nextMode);
     setFeedback(null);
     setFieldErrors({});
     setShowPassword(false);
+    setOtpSent(false);
+    setOtpCode("");
+  }
+
+  async function handleOtpRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setFeedback(null);
+    try {
+      const message = await requestOtp(phone);
+      setOtpSent(true);
+      setFeedback(message);
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Unable to send OTP.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleOtpVerify(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setFeedback(null);
+    try {
+      await verifyOtp(phone, otpCode);
+      navigate(afterAuthPath(readStoredAuthSession()?.user), { replace: true });
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Unable to verify OTP.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -78,7 +117,7 @@ export function LoginPage() {
     setFieldErrors({});
 
     try {
-      if (mode === "login") {
+      if (activeMode === "login") {
         await login({
           email: form.email,
           password: form.password,
@@ -86,7 +125,7 @@ export function LoginPage() {
       } else {
         await register(form);
       }
-      navigate("/dashboard", { replace: true });
+      navigate(afterAuthPath(readStoredAuthSession()?.user), { replace: true });
     } catch (error) {
       if (error instanceof ApiError && typeof error.details === "object" && error.details !== null) {
         const response = error.details as {
@@ -115,143 +154,207 @@ export function LoginPage() {
   return (
     <section className="auth-panel">
       <div className="auth-panel__hero">
-        <span className="brand-kicker">Simple by default</span>
-        <h1>Run stock, sales, and purchases without spreadsheet chaos.</h1>
+        <span className="brand-kicker">Open on your phone</span>
+        <h1>Start billing in a few minutes. Your data stays in the cloud — not on a shop PC.</h1>
         <p>
-          This frontend foundation is wired for fast onboarding, protected
-          routes, and business-scoped API requests.
+          Sign in with your mobile number. No software to install on the counter computer.
         </p>
-
         <div className="hero-points">
           <div className="hero-point">
-            <strong>Three-tap mindset</strong>
-            <p>Every future workflow is being shaped around the MVP product docs.</p>
+            <strong>Phone login</strong>
+            <p>OTP on SMS (or in server logs while SMS is not connected).</p>
           </div>
           <div className="hero-point">
-            <strong>Tenant-aware shell</strong>
-            <p>The active business ID can flow straight into backend requests.</p>
+            <strong>Sell first</strong>
+            <p>Walk-in customer and sample items are ready after you name the shop.</p>
           </div>
           <div className="hero-point">
-            <strong>Feature-first structure</strong>
-            <p>Auth, dashboard, products, and inventory all have clear homes.</p>
+            <strong>Safe if the PC dies</strong>
+            <p>Stock and bills live on the server you host — with backups.</p>
           </div>
         </div>
       </div>
 
       <div className="auth-panel__form">
-        <span className="brand-kicker">Owner login</span>
-        <h1>{mode === "login" ? "Sign in to your business" : "Create your owner account"}</h1>
+        <span className="brand-kicker">Shop login</span>
+        <h1>
+          {activeMode === "otp"
+            ? "Enter your mobile number"
+            : activeMode === "login"
+              ? "Sign in with email"
+              : "Create an email account"}
+        </h1>
         <p>
-          Real JWT-based authentication is now live. Create an owner account or
-          sign back in to continue.
+          {activeMode === "otp"
+            ? openRegistration
+              ? "We send a 6-digit code. New shops go straight to naming the shop."
+              : "We send a 6-digit code to numbers the operator has already registered."
+            : openRegistration
+              ? "Existing email logins still work. New shops should use mobile OTP."
+              : "Use the email and password the operator issued for your shop."}
         </p>
 
         <div className="helper-row">
           <button
             type="button"
-            className={mode === "login" ? "primary-button" : "ghost-button"}
-            onClick={() => switchMode("login")}
+            className={activeMode === "otp" ? "primary-button" : "ghost-button"}
+            onClick={() => switchMode("otp")}
           >
-            Sign in
+            Mobile OTP
           </button>
           <button
             type="button"
-            className={mode === "register" ? "primary-button" : "ghost-button"}
+            className={activeMode === "login" ? "primary-button" : "ghost-button"}
+            onClick={() => switchMode("login")}
+          >
+            Email
+          </button>
+          {openRegistration ? (
+          <button
+            type="button"
+            className={activeMode === "register" ? "primary-button" : "ghost-button"}
             onClick={() => switchMode("register")}
           >
-            Create account
+            Email signup
           </button>
+          ) : null}
         </div>
 
-        <form className="form-stack" onSubmit={handleSubmit}>
-          {mode === "register" ? (
+        {activeMode === "otp" ? (
+          <form className="form-stack" onSubmit={otpSent ? handleOtpVerify : handleOtpRequest}>
             <div className="field">
-              <label htmlFor="fullName">Full name</label>
+              <label htmlFor="phone">Mobile number</label>
               <input
-                id="fullName"
-                autoComplete="name"
-                value={form.fullName}
+                id="phone"
+                inputMode="numeric"
+                autoComplete="tel"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                placeholder="9876543210"
+              />
+            </div>
+            {otpSent ? (
+              <div className="field">
+                <label htmlFor="otp">6-digit code</label>
+                <input
+                  id="otp"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={otpCode}
+                  onChange={(event) => setOtpCode(event.target.value)}
+                  placeholder="123456"
+                />
+              </div>
+            ) : null}
+            {feedback ? (
+              <div className={otpSent && !feedback.toLowerCase().includes("wrong") ? "form-success" : "form-error"} role="status">
+                {feedback}
+              </div>
+            ) : null}
+            <button type="submit" className="primary-button" disabled={isSubmitting}>
+              {isSubmitting
+                ? "Please wait..."
+                : otpSent
+                  ? "Verify and enter"
+                  : "Send OTP"}
+            </button>
+            {otpSent ? (
+              <button type="button" className="text-link" onClick={() => setOtpSent(false)}>
+                Change number
+              </button>
+            ) : null}
+          </form>
+        ) : (
+          <form className="form-stack" onSubmit={handleSubmit}>
+            {activeMode === "register" ? (
+              <div className="field">
+                <label htmlFor="fullName">Full name</label>
+                <input
+                  id="fullName"
+                  autoComplete="name"
+                  value={form.fullName}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, fullName: event.target.value }))
+                  }
+                />
+                {fieldErrors.fullName ? (
+                  <span className="field-error">{fieldErrors.fullName}</span>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="field">
+              <label htmlFor="email">Email</label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                value={form.email}
                 onChange={(event) =>
-                  setForm((current) => ({ ...current, fullName: event.target.value }))
+                  setForm((current) => ({ ...current, email: event.target.value }))
                 }
               />
-              {fieldErrors.fullName ? (
-                <span className="field-error">{fieldErrors.fullName}</span>
+              {fieldErrors.email ? <span className="field-error">{fieldErrors.email}</span> : null}
+            </div>
+
+            <div className="field">
+              <label htmlFor="password">Password</label>
+              <div className="password-field">
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  minLength={activeMode === "register" ? 8 : undefined}
+                  autoComplete={activeMode === "register" ? "new-password" : "current-password"}
+                  value={form.password}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, password: event.target.value }))
+                  }
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPassword((current) => !current)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                >
+                  <EyeIcon open={showPassword} />
+                </button>
+              </div>
+              {fieldErrors.password ? (
+                <span className="field-error">{fieldErrors.password}</span>
+              ) : activeMode === "register" ? (
+                <span className="inline-note">Use at least 8 characters.</span>
               ) : null}
             </div>
-          ) : null}
 
-          <div className="field">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              value={form.email}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, email: event.target.value }))
-              }
-            />
-            {fieldErrors.email ? <span className="field-error">{fieldErrors.email}</span> : null}
-          </div>
-
-          <div className="field">
-            <label htmlFor="password">Password</label>
-            <div className="password-field">
-              <input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                minLength={mode === "register" ? 8 : undefined}
-                autoComplete={mode === "register" ? "new-password" : "current-password"}
-                value={form.password}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, password: event.target.value }))
+            {feedback ? (
+              <div
+                className={
+                  feedback.includes("successful") ? "form-success" : "form-error"
                 }
-              />
-              <button
-                type="button"
-                className="password-toggle"
-                onClick={() => setShowPassword((current) => !current)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
-                aria-pressed={showPassword}
+                role="alert"
               >
-                <EyeIcon open={showPassword} />
-              </button>
-            </div>
-            {fieldErrors.password ? (
-              <span className="field-error">{fieldErrors.password}</span>
-            ) : mode === "register" ? (
-              <span className="inline-note">Use at least 8 characters.</span>
+                {feedback}
+              </div>
             ) : null}
-          </div>
 
-          {feedback ? (
-            <div
-              className={
-                feedback.includes("successful") ? "form-success" : "form-error"
-              }
-              role="alert"
-            >
-              {feedback}
-            </div>
-          ) : null}
+            <button type="submit" className="primary-button" disabled={isSubmitting}>
+              {isSubmitting
+                ? activeMode === "login"
+                  ? "Signing in..."
+                  : "Creating account..."
+                : activeMode === "login"
+                  ? "Enter shop"
+                  : "Create account"}
+            </button>
 
-          <button type="submit" className="primary-button" disabled={isSubmitting}>
-            {isSubmitting
-              ? mode === "login"
-                ? "Signing in..."
-                : "Creating account..."
-              : mode === "login"
-                ? "Enter dashboard"
-                : "Create account"}
-          </button>
-
-          {mode === "login" ? (
-            <Link to="/forgot-password" className="text-link">
-              Forgot password?
-            </Link>
-          ) : null}
-        </form>
+            {activeMode === "login" ? (
+              <Link to="/forgot-password" className="text-link">
+                Forgot password?
+              </Link>
+            ) : null}
+          </form>
+        )}
       </div>
     </section>
   );

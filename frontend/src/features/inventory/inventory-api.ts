@@ -1,4 +1,5 @@
 import { httpClient } from "@/api/http-client";
+import { withPaging, type PageRequest, type PagedResult } from "@/api/paging";
 
 export type InventorySummary = {
   totalProducts: number;
@@ -46,9 +47,13 @@ export async function getInventorySummary(businessId: string) {
 
 export async function listInventoryStock(
   businessId: string,
-  options: { search?: string; lowStockOnly?: boolean; includeArchived?: boolean } = {},
+  options: {
+    search?: string;
+    lowStockOnly?: boolean;
+    includeArchived?: boolean;
+  } & PageRequest = {},
 ) {
-  const params = new URLSearchParams();
+  const params = withPaging(new URLSearchParams(), options);
 
   if (options.search?.trim()) {
     params.set("search", options.search.trim());
@@ -62,16 +67,23 @@ export async function listInventoryStock(
     params.set("includeArchived", "true");
   }
 
-  const query = params.toString();
-
-  return httpClient<InventoryStockItem[]>(`/inventory${query ? `?${query}` : ""}`, {
+  return httpClient<PagedResult<InventoryStockItem>>(`/inventory?${params.toString()}`, {
     businessId,
   });
 }
 
-export async function listInventoryMovements(businessId: string, productId?: string | null) {
-  const query = productId ? `?productId=${productId}` : "";
-  return httpClient<InventoryMovement[]>(`/inventory/movements${query}`, { businessId });
+export async function listInventoryMovements(
+  businessId: string,
+  productId?: string | null,
+  paging: PageRequest = {},
+) {
+  const params = withPaging(new URLSearchParams(), paging);
+  if (productId) {
+    params.set("productId", productId);
+  }
+  return httpClient<PagedResult<InventoryMovement>>(`/inventory/movements?${params.toString()}`, {
+    businessId,
+  });
 }
 
 export async function adjustInventoryStock(

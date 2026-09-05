@@ -1,5 +1,7 @@
 package com.inventory.product.service;
 
+import com.inventory.common.api.PagedResponse;
+import com.inventory.common.api.Pagination;
 import com.inventory.common.tenant.TenantContext;
 import com.inventory.inventory.entity.InventoryMovement;
 import com.inventory.inventory.repository.InventoryMovementRepository;
@@ -7,13 +9,13 @@ import com.inventory.product.dto.ProductRequest;
 import com.inventory.product.dto.ProductResponse;
 import com.inventory.product.entity.Product;
 import com.inventory.product.repository.ProductRepository;
+import com.inventory.tax.GstCalculator;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -34,6 +36,7 @@ public class ProductService {
     public ProductResponse create(ProductRequest request) {
         UUID businessId = requireBusinessId();
         validateSkuUniqueness(businessId, request.sku(), null);
+        validateBarcodeUniqueness(businessId, request.barcode(), null);
 
         Product product = new Product();
         product.setBusinessId(businessId);
@@ -53,13 +56,24 @@ public class ProductService {
     }
 
     @Transactional(readOnly = true)
-    public List<ProductResponse> list(String search, boolean includeArchived) {
+    public PagedResponse<ProductResponse> list(
+        String search,
+        boolean includeArchived,
+        Integer page,
+        Integer size
+    ) {
         UUID businessId = requireBusinessId();
 
-        return productRepository.search(businessId, normalizeSearch(search), includeArchived)
-            .stream()
-            .map(this::toResponse)
-            .toList();
+        return Pagination.map(
+            productRepository.search(
+                businessId,
+                normalizeSearch(search),
+                includeArchived,
+                false,
+                Pagination.pageable(page, size)
+            ),
+            this::toResponse
+        );
     }
 
     @Transactional(readOnly = true)
@@ -72,6 +86,7 @@ public class ProductService {
         Product product = findProduct(id);
 
         validateSkuUniqueness(businessId, request.sku(), id);
+        validateBarcodeUniqueness(businessId, request.barcode(), id);
         BigDecimal quantityBefore = product.getCurrentStock();
         BigDecimal previousOpeningStock = product.getOpeningStock();
         applyRequest(product, request, false);
@@ -98,6 +113,24 @@ public class ProductService {
         return toResponse(save(product));
     }
 
+    public ProductResponse unarchive(UUID id) {
+        Product product = findProduct(id);
+        product.setArchived(false);
+        return toResponse(save(product));
+    }
+
+    @Transactional(readOnly = true)
+    public ProductResponse getByBarcode(String barcode) {
+        String normalized = normalize(barcode);
+        if (normalized == null) {
+            throw new IllegalArgumentException("Barcode is required");
+        }
+        return toResponse(
+            productRepository.findFirstByBusinessIdAndBarcodeIgnoreCase(requireBusinessId(), normalized)
+                .orElseThrow(() -> new EntityNotFoundException("No product matches that barcode"))
+        );
+    }
+
     private Product findProduct(UUID id) {
         UUID businessId = requireBusinessId();
 
@@ -113,6 +146,9 @@ public class ProductService {
         product.setCostPrice(request.costPrice());
         product.setSellingPrice(request.sellingPrice());
         product.setLowStockThreshold(request.lowStockThreshold());
+        product.setBarcode(normalize(request.barcode()));
+        product.setHsnCode(normalizeHsn(request.hsnCode()));
+        product.setGstRate(GstCalculator.normalizeRate(request.gstRate()));
 
         if (creating) {
             product.setOpeningStock(request.openingStock());
@@ -138,6 +174,19 @@ public class ProductService {
 
         if (exists) {
             throw new IllegalArgumentException("SKU must be unique within the business");
+        }
+    }
+
+    private void validateBarcodeUniqueness(UUID businessId, String barcode, UUID productId) {
+        String normalized = normalize(barcode);
+        if (normalized == null) {
+            return;
+        }
+        boolean exists = productId == null
+            ? productRepository.existsByBusinessIdAndBarcodeIgnoreCase(businessId, normalized)
+            : productRepository.existsByBusinessIdAndBarcodeIgnoreCaseAndIdNot(businessId, normalized, productId);
+        if (exists) {
+            throw new IllegalArgumentException("Barcode must be unique within the business");
         }
     }
 
@@ -202,8 +251,16 @@ public class ProductService {
             product.getCurrentStock(),
             product.getLowStockThreshold(),
             product.isArchived(),
+            product.getBarcode(),
+            product.getHsnCode(),
+            product.getGstRate() == null ? java.math.BigDecimal.ZERO : product.getGstRate(),
             product.getCreatedAt(),
             product.getUpdatedAt()
         );
+    }
+
+    private String normalizeHsn(String value) {
+        String normalized = normalize(value);
+        return normalized == null ? null : normalized.toUpperCase();
     }
 }

@@ -5,10 +5,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/features/auth/auth-context";
 import {
   getCustomerOutstandingReport,
+  getGstReport,
   getInventoryReport,
   getPurchaseReport,
   getSalesReport,
   getSupplierOutstandingReport,
+  downloadReportExcel,
 } from "@/features/reports/reports-api";
 import { useBusinessSettings } from "@/features/settings/use-business-settings";
 
@@ -17,7 +19,8 @@ type ReportTab =
   | "sales"
   | "purchases"
   | "customer-outstanding"
-  | "supplier-outstanding";
+  | "supplier-outstanding"
+  | "gst";
 
 const reportTabs: Array<{ id: ReportTab; label: string }> = [
   { id: "inventory", label: "Inventory" },
@@ -25,6 +28,7 @@ const reportTabs: Array<{ id: ReportTab; label: string }> = [
   { id: "purchases", label: "Purchases" },
   { id: "customer-outstanding", label: "Customer dues" },
   { id: "supplier-outstanding", label: "Supplier dues" },
+  { id: "gst", label: "GST" },
 ];
 
 export function ReportsPage() {
@@ -71,12 +75,18 @@ export function ReportsPage() {
     enabled: Boolean(businessId) && activeTab === "supplier-outstanding",
   });
 
+  const gstQuery = useQuery({
+    queryKey: ["reports-gst", businessId, fromDate, toDate],
+    queryFn: () => getGstReport(businessId!, dateFilters),
+    enabled: Boolean(businessId) && activeTab === "gst",
+  });
+
   if (!businessId) {
     return (
       <section className="empty-state">
         <span className="brand-kicker">Business required</span>
         <h1>Finish business setup before viewing reports.</h1>
-        <p>Reports are business-scoped and need an active tenant first.</p>
+        <p>Set up your business first so reports use the right shop data.</p>
         <Link to="/business-setup" className="primary-button">
           Complete business setup
         </Link>
@@ -84,7 +94,8 @@ export function ReportsPage() {
     );
   }
 
-  const showDateFilters = activeTab === "sales" || activeTab === "purchases";
+  const showDateFilters =
+    activeTab === "sales" || activeTab === "purchases" || activeTab === "gst";
   const activeQuery =
     activeTab === "inventory"
       ? inventoryQuery
@@ -94,7 +105,22 @@ export function ReportsPage() {
           ? purchasesQuery
           : activeTab === "customer-outstanding"
             ? customerOutstandingQuery
-            : supplierOutstandingQuery;
+            : activeTab === "gst"
+              ? gstQuery
+              : supplierOutstandingQuery;
+
+  const exportPath =
+    activeTab === "inventory"
+      ? `/reports/inventory.xlsx${lowStockOnly ? "?lowStockOnly=true" : ""}`
+      : activeTab === "sales"
+        ? `/reports/sales.xlsx${fromDate || toDate ? `?${new URLSearchParams({ ...(fromDate ? { from: fromDate } : {}), ...(toDate ? { to: toDate } : {}) }).toString()}` : ""}`
+        : activeTab === "purchases"
+          ? `/reports/purchases.xlsx${fromDate || toDate ? `?${new URLSearchParams({ ...(fromDate ? { from: fromDate } : {}), ...(toDate ? { to: toDate } : {}) }).toString()}` : ""}`
+          : activeTab === "customer-outstanding"
+            ? "/reports/outstanding/customers.xlsx"
+            : activeTab === "gst"
+              ? `/reports/gst.xlsx${fromDate || toDate ? `?${new URLSearchParams({ ...(fromDate ? { from: fromDate } : {}), ...(toDate ? { to: toDate } : {}) }).toString()}` : ""}`
+              : "/reports/outstanding/suppliers.xlsx";
 
   return (
     <>
@@ -102,8 +128,8 @@ export function ReportsPage() {
         <span className="brand-kicker">Business reports</span>
         <h1>On-screen reports for stock, trading, and outstanding balances.</h1>
         <p>
-          Inventory, sales, purchases, and customer/supplier dues for the current
-          business. Export comes later.
+          Inventory, sales, purchases, dues, and GST for this shop. Download Excel for
+          your accountant, or use browser print.
         </p>
       </section>
 
@@ -111,8 +137,17 @@ export function ReportsPage() {
         <div className="panel-heading">
           <div>
             <h3>Choose a report</h3>
-            <p>Switch between the five MVP report views.</p>
+            <p>Switch between report views, then download Excel if you need a file.</p>
           </div>
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => {
+              void downloadReportExcel(businessId, exportPath, `${activeTab}-report.xlsx`);
+            }}
+          >
+            Download Excel
+          </button>
         </div>
 
         <div className="report-tabs" role="tablist" aria-label="Report type">
@@ -388,6 +423,47 @@ export function ReportsPage() {
                   <div className="product-metrics">
                     <span>Billed: {formatMoney(row.billedAmount)}</span>
                     <span>Paid: {formatMoney(row.amountPaid)}</span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </>
+        ) : null}
+
+        {activeTab === "gst" && gstQuery.data ? (
+          <>
+            <section className="card-grid report-summary">
+              <article className="stat-card">
+                <h3>Taxable</h3>
+                <div className="stat-value">{formatMoney(gstQuery.data.taxableAmount)}</div>
+              </article>
+              <article className="stat-card">
+                <h3>Tax</h3>
+                <div className="stat-value">{formatMoney(gstQuery.data.totalTax)}</div>
+              </article>
+            </section>
+            <div className="product-list">
+              {gstQuery.data.rows.length === 0 ? (
+                <p className="inline-note">No GST rows for this date range.</p>
+              ) : null}
+              {gstQuery.data.rows.map((row, index) => (
+                <article key={`${row.documentNumber}-${index}`} className="product-card">
+                  <div className="product-card__row">
+                    <div>
+                      <h4>
+                        {row.documentType} {row.documentNumber}
+                      </h4>
+                      <p>
+                        {row.partyName} · {formatDate(row.documentDate)}
+                      </p>
+                    </div>
+                    <strong>{formatMoney(row.taxableAmount)}</strong>
+                  </div>
+                  <div className="product-metrics">
+                    <span>GST {row.gstRate}%</span>
+                    <span>CGST {formatMoney(row.cgstAmount)}</span>
+                    <span>SGST {formatMoney(row.sgstAmount)}</span>
+                    <span>IGST {formatMoney(row.igstAmount)}</span>
                   </div>
                 </article>
               ))}

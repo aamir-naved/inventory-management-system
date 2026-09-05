@@ -1,5 +1,7 @@
 package com.inventory.inventory.service;
 
+import com.inventory.common.api.PagedResponse;
+import com.inventory.common.api.Pagination;
 import com.inventory.common.tenant.TenantContext;
 import com.inventory.inventory.dto.InventoryAdjustmentRequest;
 import com.inventory.inventory.dto.InventoryMovementResponse;
@@ -11,6 +13,7 @@ import com.inventory.product.entity.Product;
 import com.inventory.product.repository.ProductRepository;
 import com.inventory.settings.service.SettingsService;
 import jakarta.persistence.EntityNotFoundException;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,19 +40,50 @@ public class InventoryService {
     }
 
     @Transactional(readOnly = true)
-    public List<InventoryStockResponse> listStock(String search, boolean lowStockOnly, boolean includeArchived) {
+    public PagedResponse<InventoryStockResponse> listStock(
+        String search,
+        boolean lowStockOnly,
+        boolean includeArchived,
+        Integer page,
+        Integer size
+    ) {
         UUID businessId = requireBusinessId();
 
-        return productRepository.search(businessId, normalizeSearch(search), includeArchived).stream()
+        return Pagination.map(
+            productRepository.search(
+                businessId,
+                normalizeSearch(search),
+                includeArchived,
+                lowStockOnly,
+                Pagination.pageable(page, size)
+            ),
+            this::toStockResponse
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<InventoryStockResponse> listStockAll(
+        String search,
+        boolean lowStockOnly,
+        boolean includeArchived
+    ) {
+        UUID businessId = requireBusinessId();
+        return productRepository.search(
+                businessId,
+                normalizeSearch(search),
+                includeArchived,
+                lowStockOnly,
+                Pageable.unpaged()
+            )
+            .stream()
             .map(this::toStockResponse)
-            .filter(stock -> !lowStockOnly || stock.lowStock())
             .toList();
     }
 
     @Transactional(readOnly = true)
     public InventorySummaryResponse getSummary() {
         UUID businessId = requireBusinessId();
-        List<Product> products = productRepository.search(businessId, "", false);
+        List<Product> products = productRepository.searchAll(businessId, "", false);
 
         long lowStockProducts = products.stream()
             .filter(this::isLowStock)
@@ -102,15 +136,18 @@ public class InventoryService {
     }
 
     @Transactional(readOnly = true)
-    public List<InventoryMovementResponse> listMovements(UUID productId) {
+    public PagedResponse<InventoryMovementResponse> listMovements(UUID productId, Integer page, Integer size) {
         UUID businessId = requireBusinessId();
-        List<InventoryMovement> movements = productId == null
-            ? inventoryMovementRepository.findTop100ByBusinessIdOrderByCreatedAtDesc(businessId)
-            : inventoryMovementRepository.findTop100ByBusinessIdAndProduct_IdOrderByCreatedAtDesc(businessId, productId);
+        var pageable = Pagination.pageable(page, size);
+        var movements = productId == null
+            ? inventoryMovementRepository.findByBusinessIdOrderByCreatedAtDesc(businessId, pageable)
+            : inventoryMovementRepository.findByBusinessIdAndProduct_IdOrderByCreatedAtDesc(
+                businessId,
+                productId,
+                pageable
+            );
 
-        return movements.stream()
-            .map(this::toMovementResponse)
-            .toList();
+        return Pagination.map(movements, this::toMovementResponse);
     }
 
     private Product findProduct(UUID productId) {

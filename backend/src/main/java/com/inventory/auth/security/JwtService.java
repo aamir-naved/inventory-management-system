@@ -25,9 +25,10 @@ public class JwtService {
 
     public JwtService(AuthProperties authProperties) {
         this.authProperties = authProperties;
-        String secret = authProperties.getJwtSecret() == null || authProperties.getJwtSecret().isBlank()
-            ? "inventory-management-system-super-secret-key-for-development-only-2026"
-            : authProperties.getJwtSecret();
+        String secret = authProperties.getJwtSecret();
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("APP_JWT_SECRET / app.auth.jwt-secret must be set");
+        }
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
@@ -37,7 +38,7 @@ public class JwtService {
 
         String token = Jwts.builder()
             .subject(userId.toString())
-            .claim("email", email)
+            .claim("email", email == null ? "" : email)
             .issuedAt(Date.from(now.toInstant()))
             .expiration(Date.from(expiresAt.toInstant()))
             .signWith(secretKey)
@@ -56,7 +57,8 @@ public class JwtService {
 
             return new AuthenticatedUser(
                 UUID.fromString(claims.getSubject()),
-                claims.get("email", String.class)
+                claims.get("email", String.class),
+                false
             );
         } catch (JwtException | IllegalArgumentException exception) {
             throw new IllegalArgumentException("Invalid or expired access token");

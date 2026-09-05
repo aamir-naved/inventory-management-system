@@ -79,7 +79,7 @@ class SaleReturnControllerTest extends AuthenticatedControllerTestSupport {
                 .header("Authorization", authorizationHeader)
                 .header("X-Business-Id", businessId))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].currentStock").value(90.0));
+            .andExpect(jsonPath("$.items[0].currentStock").value(90.0));
 
         mockMvc.perform(get("/sales/{saleId}/returns", saleId)
                 .header("Authorization", authorizationHeader)

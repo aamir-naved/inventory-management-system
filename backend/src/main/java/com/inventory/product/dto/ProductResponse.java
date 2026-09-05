@@ -17,6 +17,9 @@ public record ProductResponse(
     BigDecimal currentStock,
     BigDecimal lowStockThreshold,
     boolean archived,
+    String barcode,
+    String hsnCode,
+    BigDecimal gstRate,
     OffsetDateTime createdAt,
     OffsetDateTime updatedAt
 ) {

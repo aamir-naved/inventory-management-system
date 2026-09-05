@@ -23,6 +23,10 @@ spring:
     baseline-on-migrate: false
   jackson:
     time-zone: UTC
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 2MB
 
 server:
   port: ${SERVER_PORT:8080}
@@ -43,14 +47,25 @@ app:
   tenant:
     header-name: X-Business-Id
   auth:
-    jwt-secret: ${APP_JWT_SECRET:inventory-management-system-super-secret-key-for-development-only-2026}
+    jwt-secret: ${APP_JWT_SECRET:}
     access-token-ttl: ${APP_JWT_ACCESS_TOKEN_TTL:PT1H}
     refresh-token-ttl: ${APP_JWT_REFRESH_TOKEN_TTL:P14D}
     email-verify-token-ttl: ${APP_EMAIL_VERIFY_TOKEN_TTL:PT24H}
     password-reset-token-ttl: ${APP_PASSWORD_RESET_TOKEN_TTL:PT1H}
     public-app-url: ${APP_PUBLIC_APP_URL:http://localhost:5173}
     mail-from: ${APP_MAIL_FROM:noreply@inventory.local}
+    sms-webhook-url: ${APP_SMS_WEBHOOK_URL:}
+  platform:
+    open-registration: ${APP_OPEN_REGISTRATION:true}
+    admin-email: ${APP_PLATFORM_ADMIN_EMAIL:}
+    admin-password: ${APP_PLATFORM_ADMIN_PASSWORD:}
+    admin-reset: ${APP_PLATFORM_ADMIN_RESET:false}
   cors:
     allowed-origins:
       - http://localhost:5173
       - http://127.0.0.1:5173
+      - http://localhost:3000
+      - http://127.0.0.1:3000
+    allowed-origin-patterns:
+      - http://localhost:*
+      - http://127.0.0.1:*

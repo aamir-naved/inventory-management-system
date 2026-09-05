@@ -1,14 +1,19 @@
 import {
   useDeferredValue,
   useEffect,
+  useRef,
   useState,
+  type ChangeEvent,
   type FormEvent,
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/http-client";
 import { FieldLabel } from "@/components/ui/field-label";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 import { useAuth } from "@/features/auth/auth-context";
+import { canManageCatalog } from "@/features/auth/roles";
+import { useBusinessSettings } from "@/features/settings/use-business-settings";
 import {
   parseNumericDraft,
   resolveNumericDraft,
@@ -17,12 +22,16 @@ import {
 import {
   archiveProduct,
   createProduct,
+  downloadProductsExcel,
+  importProductsExcel,
   listProducts,
+  unarchiveProduct,
   updateProduct,
+  type ProductImportResult,
   type ProductPayload,
   type ProductRecord,
 } from "@/features/products/product-api";
-import { useBusinessSettings } from "@/features/settings/use-business-settings";
+import { GST_RATES } from "@/lib/gst";
 
 const COMMON_UNITS = [
   "Pieces",
@@ -48,6 +57,9 @@ type ProductFormState = {
   sellingPrice: NumericDraft;
   openingStock: NumericDraft;
   lowStockThreshold: NumericDraft;
+  barcode: string;
+  hsnCode: string;
+  gstRate: number;
 };
 
 const initialForm: ProductFormState = {
@@ -59,6 +71,9 @@ const initialForm: ProductFormState = {
   sellingPrice: "",
   openingStock: "",
   lowStockThreshold: "",
+  barcode: "",
+  hsnCode: "",
+  gstRate: 0,
 };
 
 function isCommonUnit(unit: string): unit is (typeof COMMON_UNITS)[number] {
@@ -75,6 +90,9 @@ function toFormState(product: ProductRecord): ProductFormState {
     sellingPrice: Number(product.sellingPrice),
     openingStock: Number(product.openingStock),
     lowStockThreshold: Number(product.lowStockThreshold),
+    barcode: product.barcode ?? "",
+    hsnCode: product.hsnCode ?? "",
+    gstRate: Number(product.gstRate ?? 0),
   };
 }
 
@@ -88,22 +106,29 @@ function toPayload(form: ProductFormState): ProductPayload {
     sellingPrice: resolveNumericDraft(form.sellingPrice),
     openingStock: resolveNumericDraft(form.openingStock),
     lowStockThreshold: resolveNumericDraft(form.lowStockThreshold),
+    barcode: form.barcode,
+    hsnCode: form.hsnCode,
+    gstRate: Number(form.gstRate),
   };
 }
 
 export function ProductsPage() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
+  const canEdit = canManageCatalog(session?.role);
   const businessId = session?.businessId ?? null;
   const { formatMoney, defaultLowStockThreshold } = useBusinessSettings();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
+  const [page, setPage] = useState(0);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<ProductRecord | null>(null);
   const [form, setForm] = useState<ProductFormState>(initialForm);
   const [unitMode, setUnitMode] = useState<"preset" | "other">("preset");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [importResult, setImportResult] = useState<ProductImportResult | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   function blankForm(): ProductFormState {
     return {
@@ -114,15 +139,20 @@ export function ProductsPage() {
   }
 
   const productsQuery = useQuery({
-    queryKey: ["products", businessId, deferredSearch, includeArchived],
+    queryKey: ["products", businessId, deferredSearch, includeArchived, page],
     queryFn: () =>
       listProducts({
         businessId: businessId!,
         search: deferredSearch,
         includeArchived,
+        page,
       }),
     enabled: Boolean(businessId),
   });
+
+  useEffect(() => {
+    setPage(0);
+  }, [deferredSearch, includeArchived]);
 
   useEffect(() => {
     if (!selectedProduct) {
@@ -179,14 +209,77 @@ export function ProductsPage() {
       return archiveProduct(businessId, product.id);
     },
     onSuccess: async (product) => {
-      setFeedback(`${product.name} archived.`);
+      setFeedback(`${product.name} archived and hidden from the default list.`);
       if (selectedProduct?.id === product.id) {
         setSelectedProduct(null);
       }
-      await queryClient.invalidateQueries({ queryKey: ["products", businessId] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["products", businessId] }),
+        queryClient.invalidateQueries({ queryKey: ["inventory-stock", businessId] }),
+      ]);
     },
     onError: () => {
       setFeedback("Unable to archive product.");
+    },
+  });
+
+  const unarchiveMutation = useMutation({
+    mutationFn: async (product: ProductRecord) => {
+      if (!businessId) {
+        throw new Error("Business setup is required before products can be managed.");
+      }
+
+      return unarchiveProduct(businessId, product.id);
+    },
+    onSuccess: async (product) => {
+      setFeedback(`${product.name} restored to the default list.`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["products", businessId] }),
+        queryClient.invalidateQueries({ queryKey: ["inventory-stock", businessId] }),
+      ]);
+    },
+    onError: () => {
+      setFeedback("Unable to restore product.");
+    },
+  });
+
+  const exportMutation = useMutation({
+    mutationFn: async () => {
+      if (!businessId) {
+        throw new Error("Business setup is required before products can be exported.");
+      }
+
+      return downloadProductsExcel(businessId);
+    },
+    onSuccess: () => {
+      setFeedback("Product catalog downloaded as Excel.");
+    },
+    onError: () => {
+      setFeedback("Unable to download the Excel file.");
+    },
+  });
+
+  const importMutation = useMutation({
+    mutationFn: async (file: File) => {
+      if (!businessId) {
+        throw new Error("Business setup is required before products can be imported.");
+      }
+
+      return importProductsExcel(businessId, file);
+    },
+    onSuccess: async (result) => {
+      setImportResult(result);
+      const parts = [
+        result.created ? `${result.created} added` : null,
+        result.updated ? `${result.updated} updated` : null,
+        result.failed ? `${result.failed} could not be imported` : null,
+      ].filter(Boolean);
+      setFeedback(parts.length > 0 ? `Excel import finished: ${parts.join(", ")}.` : "Excel import finished.");
+      await queryClient.invalidateQueries({ queryKey: ["products", businessId] });
+    },
+    onError: (error) => {
+      setImportResult(null);
+      setFeedback(error instanceof Error ? error.message : "Unable to import the Excel file.");
     },
   });
 
@@ -227,6 +320,22 @@ export function ProductsPage() {
     setFeedback(null);
   }
 
+  function handleImportClick() {
+    fileInputRef.current?.click();
+  }
+
+  function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+
+    setFeedback(null);
+    setImportResult(null);
+    importMutation.mutate(file);
+  }
+
   const unitSelectValue = unitMode === "other" || !isCommonUnit(form.unit) ? "Other" : form.unit;
 
   if (!businessId) {
@@ -235,7 +344,7 @@ export function ProductsPage() {
         <span className="brand-kicker">Business required</span>
         <h1>Finish business setup before adding products.</h1>
         <p>
-          Products are tenant-scoped, so we need the business profile saved first.
+          Set up your business first so products belong to the right shop.
         </p>
       </section>
     );
@@ -247,12 +356,14 @@ export function ProductsPage() {
         <span className="brand-kicker">Product management</span>
         <h1>Build the product catalog that powers inventory, purchases, and sales.</h1>
         <p>
-          This flow is now live end to end: create, edit, search, and archive
-          products for the active business.
+          Add products one by one, or download Excel, fill your shop list, and upload it
+          back. Opening stock is used only for new products. Archive hides a product from
+          the default list; turn on Show archived to find it, then Restore to bring it back.
         </p>
       </section>
 
       <section className="workspace-grid">
+        {canEdit ? (
         <article className="panel">
           <div className="panel-heading">
             <div>
@@ -296,6 +407,21 @@ export function ProductsPage() {
                   placeholder="CEM-001"
                 />
                 {fieldErrors.sku ? <span className="field-error">{fieldErrors.sku}</span> : null}
+              </div>
+
+              <div className="field">
+                <FieldLabel
+                  htmlFor="product-barcode"
+                  label="Barcode"
+                  info="Optional EAN/UPC used on the Counter page for fast scanning."
+                />
+                <input
+                  id="product-barcode"
+                  value={form.barcode}
+                  onChange={(event) => updateField("barcode", event.target.value)}
+                  placeholder="8901234567890"
+                />
+                {fieldErrors.barcode ? <span className="field-error">{fieldErrors.barcode}</span> : null}
               </div>
 
               <div className="field">
@@ -442,9 +568,44 @@ export function ProductsPage() {
               </div>
             </div>
 
+            <div className="split-grid">
+              <div className="field">
+                <FieldLabel
+                  htmlFor="product-hsn"
+                  label="HSN"
+                  info="Optional HSN/SAC code printed on GST invoices."
+                />
+                <input
+                  id="product-hsn"
+                  value={form.hsnCode}
+                  maxLength={8}
+                  onChange={(event) => updateField("hsnCode", event.target.value)}
+                  placeholder="2523"
+                />
+              </div>
+              <div className="field">
+                <FieldLabel
+                  htmlFor="product-gst"
+                  label="GST %"
+                  info="GST rate used when GST invoicing is enabled for the shop."
+                />
+                <select
+                  id="product-gst"
+                  value={form.gstRate}
+                  onChange={(event) => updateField("gstRate", Number(event.target.value))}
+                >
+                  {GST_RATES.map((rate) => (
+                    <option key={rate} value={rate}>
+                      {rate}%
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             {feedback ? <p className="inline-note">{feedback}</p> : null}
 
-            <button type="submit" className="primary-button" disabled={saveMutation.isPending}>
+            <button type="submit" className="primary-button" disabled={!canEdit || saveMutation.isPending}>
               {saveMutation.isPending
                 ? "Saving..."
                 : selectedProduct
@@ -453,22 +614,53 @@ export function ProductsPage() {
             </button>
           </form>
         </article>
+        ) : null}
 
         <article className="panel">
           <div className="panel-heading">
             <div>
               <h3>Product catalog</h3>
-              <p>Search by product name, SKU, or category.</p>
+              <p>
+                Search by name, SKU, or category. Archived products stay in the system but
+                are hidden unless Show archived is on. Restore puts them back on the default
+                list.
+              </p>
             </div>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={includeArchived}
-                onChange={(event) => setIncludeArchived(event.target.checked)}
-              />
-              <span>Show archived</span>
-            </label>
+            <div className="excel-actions">
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={exportMutation.isPending}
+                onClick={() => exportMutation.mutate()}
+              >
+                {exportMutation.isPending ? "Downloading..." : "Download Excel"}
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                disabled={importMutation.isPending}
+                onClick={handleImportClick}
+              >
+                {importMutation.isPending ? "Importing..." : "Upload Excel"}
+              </button>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={includeArchived}
+                  onChange={(event) => setIncludeArchived(event.target.checked)}
+                />
+                <span>Show archived</span>
+              </label>
+            </div>
           </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            hidden
+            onChange={handleImportFile}
+          />
 
           <div className="field">
             <label htmlFor="product-search">Search products</label>
@@ -482,15 +674,33 @@ export function ProductsPage() {
 
           {productsQuery.isLoading ? <p className="inline-note">Loading products...</p> : null}
 
-          {!productsQuery.isLoading && (productsQuery.data?.length ?? 0) === 0 ? (
+          {importResult && importResult.errors.length > 0 ? (
+            <div className="import-errors">
+              <strong>Rows that need a fix</strong>
+              <ul>
+                {importResult.errors.slice(0, 8).map((error) => (
+                  <li key={`${error.rowNumber}-${error.message}`}>
+                    Row {error.rowNumber}: {error.message}
+                  </li>
+                ))}
+              </ul>
+              {importResult.errors.length > 8 ? (
+                <p className="inline-note">
+                  {importResult.errors.length - 8} more row{importResult.errors.length - 8 === 1 ? "" : "s"} not shown.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {!productsQuery.isLoading && (productsQuery.data?.totalItems ?? 0) === 0 ? (
             <div className="empty-inline-state">
               <strong>No products yet</strong>
-              <p>Create your first product to start inventory tracking.</p>
+              <p>Create your first product, or upload an Excel list to start inventory tracking.</p>
             </div>
           ) : null}
 
           <div className="product-list">
-            {productsQuery.data?.map((product) => (
+            {productsQuery.data?.items.map((product) => (
               <article key={product.id} className="product-card">
                 <div className="product-card__row">
                   <div>
@@ -537,11 +747,21 @@ export function ProductsPage() {
                     >
                       Archive
                     </button>
-                  ) : null}
+                  ) : (
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      disabled={unarchiveMutation.isPending}
+                      onClick={() => unarchiveMutation.mutate(product)}
+                    >
+                      Restore
+                    </button>
+                  )}
                 </div>
               </article>
             ))}
           </div>
+          <PaginationBar page={productsQuery.data} onPageChange={setPage} />
         </article>
       </section>
     </>

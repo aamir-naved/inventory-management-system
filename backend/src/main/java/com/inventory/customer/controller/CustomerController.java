@@ -1,5 +1,6 @@
 package com.inventory.customer.controller;
 
+import com.inventory.common.api.PagedResponse;
 import com.inventory.customer.dto.CustomerRequest;
 import com.inventory.customer.dto.CustomerResponse;
 import com.inventory.customer.dto.CustomerSummaryResponse;
@@ -45,11 +46,13 @@ public class CustomerController {
     }
 
     @GetMapping
-    public List<CustomerResponse> list(
+    public PagedResponse<CustomerResponse> list(
         @RequestParam(required = false) String search,
-        @RequestParam(defaultValue = "false") boolean includeArchived
+        @RequestParam(defaultValue = "false") boolean includeArchived,
+        @RequestParam(required = false) Integer page,
+        @RequestParam(required = false) Integer size
     ) {
-        return customerService.list(search, includeArchived);
+        return customerService.list(search, includeArchived, page, size);
     }
 
     @GetMapping("/{id}")
@@ -75,5 +78,10 @@ public class CustomerController {
     @PatchMapping("/{id}/archive")
     public CustomerResponse archive(@PathVariable UUID id) {
         return customerService.archive(id);
+    }
+
+    @PatchMapping("/{id}/unarchive")
+    public CustomerResponse unarchive(@PathVariable UUID id) {
+        return customerService.unarchive(id);
     }
 }

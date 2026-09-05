@@ -24,6 +24,19 @@ public record SettingsRequest(
     @NotNull(message = "Default low stock threshold is required")
     @DecimalMin(value = "0.000", inclusive = true, message = "Default low stock threshold cannot be negative")
     @Digits(integer = 16, fraction = 3, message = "Default low stock threshold must have up to 3 decimal places")
-    BigDecimal defaultLowStockThreshold
+    BigDecimal defaultLowStockThreshold,
+
+    Boolean gstEnabled,
+
+    @Size(max = 15, message = "GSTIN must be 15 characters or fewer")
+    String gstin,
+
+    @Size(max = 2, message = "State code must be 2 characters")
+    String stateCode,
+
+    @Size(max = 100, message = "State name must be 100 characters or fewer")
+    String stateName,
+
+    Boolean gstInclusivePricing
 ) {
 }

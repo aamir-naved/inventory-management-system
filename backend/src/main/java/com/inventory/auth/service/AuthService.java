@@ -23,6 +23,7 @@ import com.inventory.auth.entity.AuthToken;
 import com.inventory.auth.entity.AuthTokenType;
 import com.inventory.auth.entity.BusinessMembership;
 import com.inventory.auth.entity.UserAccount;
+import com.inventory.auth.entity.PlatformRole;
 import com.inventory.auth.mail.MailMessage;
 import com.inventory.auth.mail.MailService;
 import com.inventory.auth.repository.BusinessMembershipRepository;
@@ -30,6 +31,7 @@ import com.inventory.auth.repository.UserAccountRepository;
 import com.inventory.auth.security.CurrentUser;
 import com.inventory.auth.security.JwtService;
 import com.inventory.config.AuthProperties;
+import com.inventory.config.RegistrationPolicy;
 
 @Service
 @Transactional
@@ -46,6 +48,7 @@ public class AuthService {
     private final AuthTokenService authTokenService;
     private final MailService mailService;
     private final AuthProperties authProperties;
+    private final RegistrationPolicy registrationPolicy;
 
     public AuthService(
         UserAccountRepository userAccountRepository,
@@ -55,7 +58,8 @@ public class AuthService {
         CurrentUser currentUser,
         AuthTokenService authTokenService,
         MailService mailService,
-        AuthProperties authProperties
+        AuthProperties authProperties,
+        RegistrationPolicy registrationPolicy
     ) {
         this.userAccountRepository = userAccountRepository;
         this.businessMembershipRepository = businessMembershipRepository;
@@ -65,9 +69,11 @@ public class AuthService {
         this.authTokenService = authTokenService;
         this.mailService = mailService;
         this.authProperties = authProperties;
+        this.registrationPolicy = registrationPolicy;
     }
 
     public AuthResponse register(RegisterRequest request) {
+        registrationPolicy.requireOpenSelfServe("Public registration is disabled. Ask the operator to create your shop.");
         String normalizedEmail = normalizeEmail(request.email());
         if (userAccountRepository.findByEmailIgnoreCase(normalizedEmail).isPresent()) {
             throw new IllegalArgumentException("An account with this email already exists");
@@ -180,6 +186,10 @@ public class AuthService {
         return buildAuthResponse(userAccount, changingPassword);
     }
 
+    public AuthResponse issueSession(UserAccount userAccount, boolean includeRefreshToken) {
+        return buildAuthResponse(userAccount, includeRefreshToken);
+    }
+
     private UserAccount requireCurrentUser() {
         UUID userId = currentUser.requireUserId();
         return userAccountRepository.findById(userId)
@@ -219,19 +229,28 @@ public class AuthService {
     }
 
     private AuthResponse buildAuthResponse(UserAccount userAccount, boolean includeRefreshToken) {
-        JwtService.JwtToken accessToken = jwtService.issueToken(userAccount.getId(), userAccount.getEmail());
-        Optional<BusinessMembership> activeMembership = businessMembershipRepository.findAllByUser_Id(userAccount.getId())
-            .stream()
-            .filter(BusinessMembership::isActive)
-            .max(Comparator.comparing(BusinessMembership::getCreatedAt));
+        JwtService.JwtToken accessToken = jwtService.issueToken(
+            userAccount.getId(),
+            userAccount.getEmail() != null ? userAccount.getEmail() : userAccount.getPhone()
+        );
+        boolean platformAdmin = userAccount.isPlatformAdmin();
+        Optional<BusinessMembership> activeMembership = platformAdmin
+            ? Optional.empty()
+            : businessMembershipRepository.findAllByUser_Id(userAccount.getId())
+                .stream()
+                .filter(BusinessMembership::isActive)
+                .max(Comparator.comparing(BusinessMembership::getCreatedAt));
 
         AuthResponse.SessionUserResponse sessionUser = new AuthResponse.SessionUserResponse(
             userAccount.getId(),
             userAccount.getFullName(),
             userAccount.getEmail(),
+            userAccount.getPhone(),
             userAccount.isEmailVerified(),
             activeMembership.map(membership -> membership.getBusiness().getId()).orElse(null),
-            activeMembership.map(membership -> membership.getBusiness().getName()).orElse(null)
+            activeMembership.map(membership -> membership.getBusiness().getName()).orElse(null),
+            activeMembership.map(BusinessMembership::getRole).orElse(null),
+            platformAdmin ? PlatformRole.PLATFORM_ADMIN : null
         );
 
         String refreshToken = null;

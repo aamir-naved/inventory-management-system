@@ -23,6 +23,11 @@ type SettingsFormState = {
   dateFormat: string;
   allowNegativeStock: boolean;
   defaultLowStockThreshold: NumericDraft;
+  gstEnabled: boolean;
+  gstin: string;
+  stateCode: string;
+  stateName: string;
+  gstInclusivePricing: boolean;
 };
 
 const initialForm: SettingsFormState = {
@@ -30,6 +35,11 @@ const initialForm: SettingsFormState = {
   dateFormat: "dd/MM/yyyy",
   allowNegativeStock: false,
   defaultLowStockThreshold: "",
+  gstEnabled: false,
+  gstin: "",
+  stateCode: "",
+  stateName: "",
+  gstInclusivePricing: false,
 };
 
 export function SettingsPage() {
@@ -54,6 +64,11 @@ export function SettingsPage() {
         dateFormat: settingsQuery.data.dateFormat,
         allowNegativeStock: settingsQuery.data.allowNegativeStock,
         defaultLowStockThreshold: Number(settingsQuery.data.defaultLowStockThreshold),
+        gstEnabled: settingsQuery.data.gstEnabled,
+        gstin: settingsQuery.data.gstin ?? "",
+        stateCode: settingsQuery.data.stateCode ?? "",
+        stateName: settingsQuery.data.stateName ?? "",
+        gstInclusivePricing: settingsQuery.data.gstInclusivePricing,
       });
     }
   }, [settingsQuery.data]);
@@ -98,6 +113,11 @@ export function SettingsPage() {
       dateFormat: form.dateFormat,
       allowNegativeStock: form.allowNegativeStock,
       defaultLowStockThreshold: resolveNumericDraft(form.defaultLowStockThreshold),
+      gstEnabled: form.gstEnabled,
+      gstin: form.gstin,
+      stateCode: form.stateCode,
+      stateName: form.stateName,
+      gstInclusivePricing: form.gstInclusivePricing,
     });
   }
 
@@ -236,6 +256,61 @@ export function SettingsPage() {
                 ) : null}
               </span>
             </label>
+
+            <label className="toggle" htmlFor="gstEnabled">
+              <input
+                id="gstEnabled"
+                type="checkbox"
+                checked={form.gstEnabled}
+                onChange={(event) => updateField("gstEnabled", event.target.checked)}
+              />
+              <span>Enable GST on invoices</span>
+            </label>
+
+            {form.gstEnabled ? (
+              <>
+                <div className="field">
+                  <label htmlFor="settings-gstin">GSTIN</label>
+                  <input
+                    id="settings-gstin"
+                    value={form.gstin}
+                    maxLength={15}
+                    onChange={(event) => updateField("gstin", event.target.value.toUpperCase())}
+                  />
+                </div>
+                <div className="split-grid">
+                  <div className="field">
+                    <label htmlFor="settings-state-code">State code</label>
+                    <input
+                      id="settings-state-code"
+                      value={form.stateCode}
+                      maxLength={2}
+                      onChange={(event) =>
+                        updateField("stateCode", event.target.value.toUpperCase())
+                      }
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor="settings-state-name">State</label>
+                    <input
+                      id="settings-state-name"
+                      value={form.stateName}
+                      onChange={(event) => updateField("stateName", event.target.value)}
+                    />
+                  </div>
+                </div>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={form.gstInclusivePricing}
+                    onChange={(event) =>
+                      updateField("gstInclusivePricing", event.target.checked)
+                    }
+                  />
+                  <span>Selling and purchase prices include GST</span>
+                </label>
+              </>
+            ) : null}
 
             {feedback ? (
               <p

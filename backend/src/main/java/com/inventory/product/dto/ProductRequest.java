@@ -41,6 +41,16 @@ public record ProductRequest(
     @NotNull(message = "Low stock threshold is required")
     @DecimalMin(value = "0.000", inclusive = true, message = "Low stock threshold cannot be negative")
     @Digits(integer = 16, fraction = 3, message = "Low stock threshold must have up to 3 decimal places")
-    BigDecimal lowStockThreshold
+    BigDecimal lowStockThreshold,
+
+    @Size(max = 64, message = "Barcode must be 64 characters or fewer")
+    String barcode,
+
+    @Size(max = 8, message = "HSN code must be 8 characters or fewer")
+    String hsnCode,
+
+    @DecimalMin(value = "0.00", inclusive = true, message = "GST rate cannot be negative")
+    @Digits(integer = 3, fraction = 2, message = "GST rate must have up to 2 decimal places")
+    BigDecimal gstRate
 ) {
 }

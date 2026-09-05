@@ -1,5 +1,6 @@
 package com.inventory.supplier.controller;
 
+import com.inventory.common.api.PagedResponse;
 import com.inventory.purchase.dto.PurchaseResponse;
 import com.inventory.purchase.service.PurchaseService;
 import com.inventory.supplier.dto.SupplierRequest;
@@ -46,11 +47,13 @@ public class SupplierController {
     }
 
     @GetMapping
-    public List<SupplierResponse> list(
+    public PagedResponse<SupplierResponse> list(
         @RequestParam(required = false) String search,
-        @RequestParam(defaultValue = "false") boolean includeArchived
+        @RequestParam(defaultValue = "false") boolean includeArchived,
+        @RequestParam(required = false) Integer page,
+        @RequestParam(required = false) Integer size
     ) {
-        return supplierService.list(search, includeArchived);
+        return supplierService.list(search, includeArchived, page, size);
     }
 
     @GetMapping("/{id}")
@@ -76,5 +79,10 @@ public class SupplierController {
     @PatchMapping("/{id}/archive")
     public SupplierResponse archive(@PathVariable UUID id) {
         return supplierService.archive(id);
+    }
+
+    @PatchMapping("/{id}/unarchive")
+    public SupplierResponse unarchive(@PathVariable UUID id) {
+        return supplierService.unarchive(id);
     }
 }

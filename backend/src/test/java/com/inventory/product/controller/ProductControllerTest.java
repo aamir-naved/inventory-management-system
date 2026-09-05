@@ -8,15 +8,23 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.io.ByteArrayOutputStream;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -74,15 +82,16 @@ class ProductControllerTest extends AuthenticatedControllerTestSupport {
                 .header("Authorization", authorizationHeader)
                 .header("X-Business-Id", businessId))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(2));
+            .andExpect(jsonPath("$.items.length()").value(2))
+            .andExpect(jsonPath("$.totalItems").value(2));
 
         mockMvc.perform(get("/products")
                 .header("Authorization", authorizationHeader)
                 .header("X-Business-Id", businessId)
                 .param("search", "cement"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(1))
-            .andExpect(jsonPath("$[0].name").value("Ultra Cement"));
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].name").value("Ultra Cement"));
     }
 
     @Test
@@ -128,15 +137,29 @@ class ProductControllerTest extends AuthenticatedControllerTestSupport {
                 .header("Authorization", authorizationHeader)
                 .header("X-Business-Id", businessId))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(0));
+            .andExpect(jsonPath("$.items.length()").value(0))
+            .andExpect(jsonPath("$.totalItems").value(0));
 
         mockMvc.perform(get("/products")
                 .header("Authorization", authorizationHeader)
                 .header("X-Business-Id", businessId)
                 .param("includeArchived", "true"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(1))
-            .andExpect(jsonPath("$[0].archived").value(true));
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].archived").value(true));
+
+        mockMvc.perform(patch("/products/{id}/unarchive", productId)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.archived").value(false));
+
+        mockMvc.perform(get("/products")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].archived").value(false));
     }
 
     @Test
@@ -145,6 +168,138 @@ class ProductControllerTest extends AuthenticatedControllerTestSupport {
                 .header("Authorization", authorizationHeader))
             .andExpect(status().isBadRequest())
             .andExpect(jsonPath("$.message").value("X-Business-Id header is required"));
+    }
+
+    @Test
+    void exportsProductsExcel() throws Exception {
+        createProduct("Ultra Cement", "CEM-001", "Cement");
+
+        byte[] body = mockMvc.perform(get("/products/export.xlsx")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(content().contentTypeCompatibleWith(
+                MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            ))
+            .andExpect(header().string("Content-Disposition", containsString("products.xlsx")))
+            .andReturn()
+            .getResponse()
+            .getContentAsByteArray();
+
+        assertThat(body.length).isGreaterThan(100);
+        try (XSSFWorkbook workbook = new XSSFWorkbook(new java.io.ByteArrayInputStream(body))) {
+            Sheet sheet = workbook.getSheet("Products");
+            assertThat(sheet.getRow(0).getCell(0).getStringCellValue()).isEqualTo("Name");
+            assertThat(sheet.getRow(1).getCell(0).getStringCellValue()).isEqualTo("Ultra Cement");
+        }
+    }
+
+    @Test
+    void importsProductsFromExcel() throws Exception {
+        MockMultipartFile file = excelFile(new String[][] {
+            {"Name", "SKU", "Category", "Unit", "Cost price", "Selling price", "Opening stock", "Low stock threshold"},
+            {"Red Bricks", "BRK-001", "Bricks", "Pieces", "8", "12", "500", "50"}
+        });
+
+        mockMvc.perform(multipart("/products/import")
+                .file(file)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.created").value(1))
+            .andExpect(jsonPath("$.updated").value(0))
+            .andExpect(jsonPath("$.failed").value(0));
+
+        mockMvc.perform(get("/products")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .param("search", "bricks"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].sku").value("BRK-001"))
+            .andExpect(jsonPath("$.items[0].currentStock").value(500.0));
+    }
+
+    @Test
+    void importUpdatesBySkuWithoutChangingStock() throws Exception {
+        createProduct("Ultra Cement", "CEM-001", "Cement");
+
+        MockMultipartFile file = excelFile(new String[][] {
+            {"Name", "SKU", "Category", "Unit", "Cost price", "Selling price", "Opening stock", "Low stock threshold"},
+            {"Ultra Cement Premium", "CEM-001", "Cement", "Bags", "330", "400", "999", "50"}
+        });
+
+        mockMvc.perform(multipart("/products/import")
+                .file(file)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.created").value(0))
+            .andExpect(jsonPath("$.updated").value(1));
+
+        mockMvc.perform(get("/products")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].name").value("Ultra Cement Premium"))
+            .andExpect(jsonPath("$.items[0].sellingPrice").value(400.0))
+            .andExpect(jsonPath("$.items[0].currentStock").value(120.0))
+            .andExpect(jsonPath("$.items[0].openingStock").value(120.0));
+    }
+
+    @Test
+    void importReportsRowErrorsWithoutAbortingValidRows() throws Exception {
+        MockMultipartFile file = excelFile(new String[][] {
+            {"Name", "SKU", "Unit", "Selling price"},
+            {"Steel Rod", "STL-001", "Tons", "62000"},
+            {"", "BAD-001", "Bags", "10"}
+        });
+
+        mockMvc.perform(multipart("/products/import")
+                .file(file)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.created").value(1))
+            .andExpect(jsonPath("$.failed").value(1))
+            .andExpect(jsonPath("$.errors[0].rowNumber").value(3))
+            .andExpect(jsonPath("$.errors[0].message").value("Name is required"));
+    }
+
+    @Test
+    void rejectsNonExcelImport() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+            "file",
+            "products.txt",
+            "text/plain",
+            "not excel".getBytes()
+        );
+
+        mockMvc.perform(multipart("/products/import")
+                .file(file)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("Upload an Excel .xlsx file."));
+    }
+
+    @Test
+    void paginatesProductList() throws Exception {
+        createProduct("Alpha Cement", "CEM-A", "Cement");
+        createProduct("Beta Bricks", "BRK-B", "Bricks");
+        createProduct("Gamma Steel", "STL-G", "Steel");
+
+        mockMvc.perform(get("/products")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .param("size", "2")
+                .param("page", "0"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(2))
+            .andExpect(jsonPath("$.page").value(0))
+            .andExpect(jsonPath("$.size").value(2))
+            .andExpect(jsonPath("$.totalItems").value(3))
+            .andExpect(jsonPath("$.totalPages").value(2));
     }
 
     private String createProduct(String name, String sku, String category) throws Exception {
@@ -168,5 +323,24 @@ class ProductControllerTest extends AuthenticatedControllerTestSupport {
             .andReturn()
             .getResponse()
             .getContentAsString();
+    }
+
+    private MockMultipartFile excelFile(String[][] rows) throws Exception {
+        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("Products");
+            for (int rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+                Row row = sheet.createRow(rowIndex);
+                for (int columnIndex = 0; columnIndex < rows[rowIndex].length; columnIndex++) {
+                    row.createCell(columnIndex).setCellValue(rows[rowIndex][columnIndex]);
+                }
+            }
+            workbook.write(output);
+            return new MockMultipartFile(
+                "file",
+                "products.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                output.toByteArray()
+            );
+        }
     }
 }

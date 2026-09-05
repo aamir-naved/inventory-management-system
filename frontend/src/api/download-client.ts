@@ -10,6 +10,7 @@ type DownloadOptions = {
   businessId?: string | null;
   signal?: AbortSignal;
   skipAuthRefresh?: boolean;
+  accept?: string;
 };
 
 function filenameFromDisposition(header: string | null, fallback: string) {
@@ -68,6 +69,7 @@ async function tryRefreshSession(): Promise<boolean> {
       user: {
         ...authPayload.user,
         emailVerified: Boolean(authPayload.user.emailVerified),
+        role: authPayload.user.role ?? session.user.role ?? "OWNER",
       },
     });
 
@@ -84,6 +86,7 @@ export async function downloadBlob(
     businessId,
     signal,
     skipAuthRefresh = false,
+    accept = "application/pdf",
   }: DownloadOptions = {},
   fallbackFilename = "download.bin",
 ): Promise<{ blob: Blob; filename: string }> {
@@ -95,14 +98,18 @@ export async function downloadBlob(
     headers: {
       ...(authSession ? { Authorization: `Bearer ${authSession.accessToken}` } : {}),
       ...(businessId ? { "X-Business-Id": businessId } : {}),
-      Accept: "application/pdf",
+      Accept: accept,
     },
   });
 
   if (response.status === 401 && !skipAuthRefresh) {
     const refreshed = await tryRefreshSession();
     if (refreshed) {
-      return downloadBlob(path, { businessId, signal, skipAuthRefresh: true }, fallbackFilename);
+      return downloadBlob(
+        path,
+        { businessId, signal, skipAuthRefresh: true, accept },
+        fallbackFilename,
+      );
     }
   }
 
@@ -154,7 +161,20 @@ export async function savePdfDownload(
   businessId: string,
   fallbackFilename: string,
 ) {
-  const { blob, filename } = await downloadBlob(path, { businessId }, fallbackFilename);
+  return saveFileDownload(path, businessId, fallbackFilename, "application/pdf");
+}
+
+export async function saveFileDownload(
+  path: string,
+  businessId: string,
+  fallbackFilename: string,
+  accept: string,
+) {
+  const { blob, filename } = await downloadBlob(
+    path,
+    { businessId, accept },
+    fallbackFilename,
+  );
   const objectUrl = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = objectUrl;

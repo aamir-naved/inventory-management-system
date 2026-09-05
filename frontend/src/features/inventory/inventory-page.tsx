@@ -1,14 +1,18 @@
 import {
   useDeferredValue,
+  useEffect,
   useMemo,
   useState,
   type FormEvent,
 } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/http-client";
 import { FieldLabel } from "@/components/ui/field-label";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 import { useAuth } from "@/features/auth/auth-context";
+import { canAdjustStock } from "@/features/auth/roles";
 import {
   adjustInventoryStock,
   getInventorySummary,
@@ -40,10 +44,14 @@ export function InventoryPage() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const businessId = session?.businessId ?? null;
+  const canAdjust = canAdjustStock(session?.role);
   const { formatMoney, formatDateTime } = useBusinessSettings();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
-  const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [stockPage, setStockPage] = useState(0);
+  const [movementPage, setMovementPage] = useState(0);
+  const lowStockOnly = searchParams.get("lowStock") === "true";
   const [includeArchived, setIncludeArchived] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryStockItem | null>(null);
   const [adjustment, setAdjustment] = useState<AdjustmentFormState>(initialAdjustment);
@@ -57,21 +65,37 @@ export function InventoryPage() {
   });
 
   const stockQuery = useQuery({
-    queryKey: ["inventory-stock", businessId, deferredSearch, lowStockOnly, includeArchived],
+    queryKey: ["inventory-stock", businessId, deferredSearch, lowStockOnly, includeArchived, stockPage],
     queryFn: () =>
       listInventoryStock(businessId!, {
         search: deferredSearch,
         lowStockOnly,
         includeArchived,
+        page: stockPage,
       }),
     enabled: Boolean(businessId),
   });
 
   const movementsQuery = useQuery({
-    queryKey: ["inventory-movements", businessId, selectedItem?.productId ?? null],
-    queryFn: () => listInventoryMovements(businessId!, selectedItem?.productId ?? undefined),
+    queryKey: ["inventory-movements", businessId, selectedItem?.productId ?? null, movementPage],
+    queryFn: () =>
+      listInventoryMovements(businessId!, selectedItem?.productId ?? undefined, { page: movementPage }),
     enabled: Boolean(businessId),
   });
+
+  useEffect(() => {
+    setStockPage(0);
+  }, [deferredSearch, lowStockOnly, includeArchived]);
+
+  function setLowStockOnly(checked: boolean) {
+    const next = new URLSearchParams(searchParams);
+    if (checked) {
+      next.set("lowStock", "true");
+    } else {
+      next.delete("lowStock");
+    }
+    setSearchParams(next, { replace: true });
+  }
 
   const adjustmentMutation = useMutation({
     mutationFn: async (payload: InventoryAdjustmentPayload) => {
@@ -116,12 +140,13 @@ export function InventoryPage() {
       return null;
     }
 
-    const latest = stockQuery.data?.find((item) => item.productId === selectedItem.productId);
+    const latest = stockQuery.data?.items.find((item) => item.productId === selectedItem.productId);
     return latest ?? selectedItem;
   }, [selectedItem, stockQuery.data]);
 
   function chooseItem(item: InventoryStockItem) {
     setSelectedItem(item);
+    setMovementPage(0);
     setAdjustment({
       productId: item.productId,
       adjustmentQuantity: "",
@@ -153,7 +178,7 @@ export function InventoryPage() {
       <section className="empty-state">
         <span className="brand-kicker">Business required</span>
         <h1>Finish business setup before managing inventory.</h1>
-        <p>Inventory is business-scoped, so it needs the active tenant first.</p>
+        <p>Set up your business first so stock belongs to the right shop.</p>
       </section>
     );
   }
@@ -164,8 +189,9 @@ export function InventoryPage() {
         <span className="brand-kicker">Inventory control</span>
         <h1>Track stock levels, value, low-stock risk, and every manual adjustment.</h1>
         <p>
-          Inventory is now live across current stock, adjustment history, valuation,
-          low-stock alerts, and search.
+          Current stock, adjustments, valuation, and low-stock alerts for your shop.
+          Archived products are hidden from the default stock list; turn on Show archived
+          to include them.
         </p>
       </section>
 
@@ -192,7 +218,10 @@ export function InventoryPage() {
           <div className="panel-heading">
             <div>
               <h3>Stock overview</h3>
-              <p>Search products and focus on low-stock items when needed.</p>
+              <p>
+                Search products and focus on low-stock items when needed. Show archived
+                includes products hidden from the default list.
+              </p>
             </div>
           </div>
 
@@ -231,7 +260,7 @@ export function InventoryPage() {
           {stockQuery.isLoading ? <p className="inline-note">Loading inventory...</p> : null}
 
           <div className="product-list">
-            {stockQuery.data?.map((item) => (
+            {stockQuery.data?.items.map((item) => (
               <article
                 key={item.productId}
                 className={`product-card${selectedItem?.productId === item.productId ? " product-card--selected" : ""}`}
@@ -260,23 +289,32 @@ export function InventoryPage() {
                 </div>
 
                 <div className="product-card__actions">
-                  <button type="button" className="ghost-button" onClick={() => chooseItem(item)}>
-                    Adjust stock
-                  </button>
+                  {canAdjust ? (
+                    <button type="button" className="ghost-button" onClick={() => chooseItem(item)}>
+                      Adjust stock
+                    </button>
+                  ) : (
+                    <button type="button" className="ghost-button" onClick={() => chooseItem(item)}>
+                      View history
+                    </button>
+                  )}
                 </div>
               </article>
             ))}
           </div>
+          <PaginationBar page={stockQuery.data} onPageChange={setStockPage} />
         </article>
 
         <article className="panel">
           <div className="panel-heading">
             <div>
-              <h3>Manual stock adjustment</h3>
+              <h3>{canAdjust ? "Manual stock adjustment" : "Stock history"}</h3>
               <p>
                 {selectedCurrentStock
-                  ? `Adjust ${selectedCurrentStock.productName}. Positive adds stock, negative removes it.`
-                  : "Select a product from the stock list to adjust its quantity."}
+                  ? canAdjust
+                    ? `Adjust ${selectedCurrentStock.productName}. Positive adds stock, negative removes it.`
+                    : `Stock movements for ${selectedCurrentStock.productName}.`
+                  : "Select a product from the stock list to view its history."}
               </p>
             </div>
           </div>
@@ -290,6 +328,7 @@ export function InventoryPage() {
                 </span>
               </div>
 
+              {canAdjust ? (
               <form className="form-stack" onSubmit={handleSubmit}>
                 <div className="field">
                   <FieldLabel
@@ -346,11 +385,12 @@ export function InventoryPage() {
                   {adjustmentMutation.isPending ? "Adjusting..." : "Apply adjustment"}
                 </button>
               </form>
+              ) : null}
 
               <div className="movement-section">
                 <h3>Stock history</h3>
                 <div className="movement-list">
-                  {movementsQuery.data?.map((movement) => (
+                  {movementsQuery.data?.items.map((movement) => (
                     <article key={movement.id} className="movement-card">
                       <div className="product-card__row">
                         <strong>{movement.movementType.split("_").join(" ")}</strong>
@@ -365,6 +405,7 @@ export function InventoryPage() {
                     </article>
                   ))}
                 </div>
+                <PaginationBar page={movementsQuery.data} onPageChange={setMovementPage} />
               </div>
             </>
           ) : (

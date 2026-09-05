@@ -19,6 +19,10 @@ public record PurchaseItemRequest(
     @NotNull(message = "Purchase price is required")
     @DecimalMin(value = "0.00", inclusive = true, message = "Purchase price cannot be negative")
     @Digits(integer = 17, fraction = 2, message = "Purchase price must have up to 2 decimal places")
-    BigDecimal purchasePrice
+    BigDecimal purchasePrice,
+
+    @DecimalMin(value = "0.00", inclusive = true, message = "GST rate cannot be negative")
+    @Digits(integer = 3, fraction = 2, message = "GST rate must have up to 2 decimal places")
+    BigDecimal gstRate
 ) {
 }

@@ -6,6 +6,11 @@ export type BusinessSettings = {
   dateFormat: string;
   allowNegativeStock: boolean;
   defaultLowStockThreshold: number;
+  gstEnabled: boolean;
+  gstin: string | null;
+  stateCode: string | null;
+  stateName: string | null;
+  gstInclusivePricing: boolean;
 };
 
 export type SettingsPayload = {
@@ -13,6 +18,11 @@ export type SettingsPayload = {
   dateFormat: string;
   allowNegativeStock: boolean;
   defaultLowStockThreshold: number;
+  gstEnabled: boolean;
+  gstin: string;
+  stateCode: string;
+  stateName: string;
+  gstInclusivePricing: boolean;
 };
 
 export const DATE_FORMAT_OPTIONS = [

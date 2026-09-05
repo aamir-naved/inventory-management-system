@@ -1,9 +1,11 @@
 import { httpClient } from "@/api/http-client";
+import { withPaging, type PageRequest, type PagedResult } from "@/api/paging";
 
 export type PurchaseItemPayload = {
   productId: string;
   quantity: number;
   purchasePrice: number;
+  gstRate?: number;
 };
 
 export type PurchasePayload = {
@@ -11,6 +13,7 @@ export type PurchasePayload = {
   purchaseDate: string;
   amountPaid: number;
   notes: string;
+  interstate?: boolean;
   items: PurchaseItemPayload[];
 };
 
@@ -27,6 +30,12 @@ export type PurchaseItemRecord = {
   quantity: number;
   purchasePrice: number;
   lineTotal: number;
+  hsnCode: string | null;
+  gstRate: number;
+  taxableAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
   returnedQuantity: number;
   returnableQuantity: number;
 };
@@ -48,6 +57,11 @@ export type PurchaseRecord = {
   cancelled: boolean;
   cancellationReason: string | null;
   hasReturns: boolean;
+  interstate: boolean;
+  taxableAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
   items: PurchaseItemRecord[];
   createdAt: string;
   updatedAt: string;
@@ -90,14 +104,17 @@ export type PurchaseReturnRecord = {
   updatedAt: string;
 };
 
-export async function listPurchases(businessId: string, search?: string) {
-  const params = new URLSearchParams();
+export async function listPurchases(
+  businessId: string,
+  search?: string,
+  paging: PageRequest = {},
+) {
+  const params = withPaging(new URLSearchParams(), paging);
   if (search?.trim()) {
     params.set("search", search.trim());
   }
 
-  const query = params.toString();
-  return httpClient<PurchaseRecord[]>(`/purchases${query ? `?${query}` : ""}`, {
+  return httpClient<PagedResult<PurchaseRecord>>(`/purchases?${params.toString()}`, {
     businessId,
   });
 }
@@ -107,6 +124,12 @@ export async function createPurchase(businessId: string, payload: PurchasePayloa
     method: "POST",
     businessId,
     body: payload,
+  });
+}
+
+export async function getPurchase(businessId: string, purchaseId: string) {
+  return httpClient<PurchaseRecord>(`/purchases/${purchaseId}`, {
+    businessId,
   });
 }
 

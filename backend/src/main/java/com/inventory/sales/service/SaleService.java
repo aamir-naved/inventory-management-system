@@ -1,5 +1,8 @@
 package com.inventory.sales.service;
 
+import com.inventory.audit.service.AuditService;
+import com.inventory.common.api.PagedResponse;
+import com.inventory.common.api.Pagination;
 import com.inventory.common.tenant.TenantContext;
 import com.inventory.customer.entity.Customer;
 import com.inventory.customer.repository.CustomerRepository;
@@ -20,6 +23,8 @@ import com.inventory.sales.entity.SaleItem;
 import com.inventory.sales.repository.SaleRepository;
 import com.inventory.sales.repository.SaleReturnRepository;
 import com.inventory.settings.service.SettingsService;
+import com.inventory.tax.GstCalculator;
+import com.inventory.tax.GstLine;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +45,7 @@ public class SaleService {
     private final InventoryMovementRepository inventoryMovementRepository;
     private final PaymentService paymentService;
     private final SettingsService settingsService;
+    private final AuditService auditService;
 
     public SaleService(
         SaleRepository saleRepository,
@@ -48,7 +54,8 @@ public class SaleService {
         ProductRepository productRepository,
         InventoryMovementRepository inventoryMovementRepository,
         PaymentService paymentService,
-        SettingsService settingsService
+        SettingsService settingsService,
+        AuditService auditService
     ) {
         this.saleRepository = saleRepository;
         this.saleReturnRepository = saleReturnRepository;
@@ -57,6 +64,7 @@ public class SaleService {
         this.inventoryMovementRepository = inventoryMovementRepository;
         this.paymentService = paymentService;
         this.settingsService = settingsService;
+        this.auditService = auditService;
     }
 
     public SaleResponse create(SaleRequest request) {
@@ -72,9 +80,17 @@ public class SaleService {
         sale.setPaymentStatus(PaymentAmounts.STATUS_PENDING);
         sale.setNotes(normalize(request.notes()));
         sale.setCancelled(false);
+        boolean interstate = Boolean.TRUE.equals(request.interstate());
+        sale.setInterstate(interstate);
+        boolean gstEnabled = settingsService.isGstEnabled();
+        boolean inclusive = settingsService.isGstInclusivePricing();
 
         List<SaleItem> items = new ArrayList<>();
         BigDecimal totalAmount = BigDecimal.ZERO;
+        BigDecimal taxableTotal = BigDecimal.ZERO;
+        BigDecimal cgstTotal = BigDecimal.ZERO;
+        BigDecimal sgstTotal = BigDecimal.ZERO;
+        BigDecimal igstTotal = BigDecimal.ZERO;
 
         for (SaleItemRequest itemRequest : request.items()) {
             Product product = findProduct(itemRequest.productId(), businessId);
@@ -86,14 +102,35 @@ public class SaleService {
                 throw new IllegalArgumentException("Stock cannot go below zero for " + product.getName());
             }
 
+            BigDecimal rate = gstEnabled
+                ? GstCalculator.normalizeRate(itemRequest.gstRate() != null ? itemRequest.gstRate() : product.getGstRate())
+                : BigDecimal.ZERO;
+            GstLine tax = GstCalculator.compute(
+                itemRequest.quantity(),
+                itemRequest.sellingPrice(),
+                rate,
+                inclusive,
+                interstate
+            );
+
             SaleItem item = new SaleItem();
             item.setSale(sale);
             item.setProduct(product);
             item.setQuantity(itemRequest.quantity());
             item.setUnitPrice(itemRequest.sellingPrice());
-            item.setLineTotal(itemRequest.quantity().multiply(itemRequest.sellingPrice()));
+            item.setHsnCode(product.getHsnCode());
+            item.setGstRate(tax.gstRate());
+            item.setTaxableAmount(tax.taxableAmount());
+            item.setCgstAmount(tax.cgstAmount());
+            item.setSgstAmount(tax.sgstAmount());
+            item.setIgstAmount(tax.igstAmount());
+            item.setLineTotal(tax.lineTotal());
             items.add(item);
             totalAmount = totalAmount.add(item.getLineTotal());
+            taxableTotal = taxableTotal.add(tax.taxableAmount());
+            cgstTotal = cgstTotal.add(tax.cgstAmount());
+            sgstTotal = sgstTotal.add(tax.sgstAmount());
+            igstTotal = igstTotal.add(tax.igstAmount());
         }
 
         BigDecimal initialPaid = request.amountPaid() == null ? BigDecimal.ZERO : request.amountPaid();
@@ -106,6 +143,10 @@ public class SaleService {
 
         sale.setItems(items);
         sale.setTotalAmount(totalAmount);
+        sale.setTaxableAmount(taxableTotal);
+        sale.setCgstAmount(cgstTotal);
+        sale.setSgstAmount(sgstTotal);
+        sale.setIgstAmount(igstTotal);
         Sale savedSale = saleRepository.save(sale);
 
         for (SaleItem item : savedSale.getItems()) {
@@ -132,12 +173,21 @@ public class SaleService {
             );
         }
 
+        auditService.record(
+            "SALE_CREATED",
+            "SALE",
+            savedSale.getId(),
+            "Sale " + savedSale.getSaleNumber() + " for " + customer.getName()
+        );
         return toResponse(savedSale);
     }
 
     @Transactional(readOnly = true)
-    public List<SaleResponse> list(String search) {
-        return saleRepository.search(requireBusinessId(), normalizeSearch(search)).stream().map(this::toResponse).toList();
+    public PagedResponse<SaleResponse> list(String search, Integer page, Integer size) {
+        return Pagination.map(
+            saleRepository.search(requireBusinessId(), normalizeSearch(search), Pagination.pageable(page, size)),
+            this::toResponse
+        );
     }
 
     @Transactional(readOnly = true)
@@ -196,6 +246,12 @@ public class SaleService {
 
         sale.setCancelled(true);
         sale.setCancellationReason(request.reason().trim());
+        auditService.record(
+            "SALE_CANCELLED",
+            "SALE",
+            sale.getId(),
+            "Cancelled sale " + sale.getSaleNumber()
+        );
         return toResponse(sale);
     }
 
@@ -284,6 +340,11 @@ public class SaleService {
             sale.isCancelled(),
             sale.getCancellationReason(),
             hasReturns,
+            sale.isInterstate(),
+            sale.getTaxableAmount(),
+            sale.getCgstAmount(),
+            sale.getSgstAmount(),
+            sale.getIgstAmount(),
             sale.getItems().stream().map(item -> {
                 BigDecimal returnedQuantity = saleReturnRepository.sumReturnedQuantityForSaleItem(
                     businessId,
@@ -297,6 +358,12 @@ public class SaleService {
                     item.getQuantity(),
                     item.getUnitPrice(),
                     item.getLineTotal(),
+                    item.getHsnCode(),
+                    item.getGstRate(),
+                    item.getTaxableAmount(),
+                    item.getCgstAmount(),
+                    item.getSgstAmount(),
+                    item.getIgstAmount(),
                     returnedQuantity,
                     item.getQuantity().subtract(returnedQuantity)
                 );

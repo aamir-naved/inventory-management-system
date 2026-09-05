@@ -17,18 +17,43 @@ import com.inventory.auth.dto.RegisterRequest;
 import com.inventory.auth.dto.ResetPasswordRequest;
 import com.inventory.auth.dto.UpdateProfileRequest;
 import com.inventory.auth.dto.VerifyEmailRequest;
+import com.inventory.auth.dto.PhoneOtpRequest;
+import com.inventory.auth.dto.PhoneOtpVerifyRequest;
+import com.inventory.auth.dto.PublicConfigResponse;
 import com.inventory.auth.service.AuthService;
+import com.inventory.auth.service.OtpAuthService;
+import com.inventory.config.RegistrationPolicy;
+import com.inventory.staff.dto.AcceptInviteRequest;
+import com.inventory.staff.dto.StaffInvitePreviewResponse;
+import com.inventory.staff.service.StaffService;
 
 import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/auth")
 public class AuthController {
 
     private final AuthService authService;
+    private final OtpAuthService otpAuthService;
+    private final StaffService staffService;
+    private final RegistrationPolicy registrationPolicy;
 
-    public AuthController(AuthService authService) {
+    public AuthController(
+        AuthService authService,
+        OtpAuthService otpAuthService,
+        StaffService staffService,
+        RegistrationPolicy registrationPolicy
+    ) {
         this.authService = authService;
+        this.otpAuthService = otpAuthService;
+        this.staffService = staffService;
+        this.registrationPolicy = registrationPolicy;
+    }
+
+    @GetMapping("/public-config")
+    public PublicConfigResponse publicConfig() {
+        return new PublicConfigResponse(registrationPolicy.isOpen());
     }
 
     @PostMapping("/register")
@@ -39,6 +64,16 @@ public class AuthController {
     @PostMapping("/login")
     public AuthResponse login(@Valid @RequestBody LoginRequest request) {
         return authService.login(request);
+    }
+
+    @PostMapping("/otp/request")
+    public MessageResponse requestOtp(@Valid @RequestBody PhoneOtpRequest request) {
+        return otpAuthService.requestCode(request.phone());
+    }
+
+    @PostMapping("/otp/verify")
+    public AuthResponse verifyOtp(@Valid @RequestBody PhoneOtpVerifyRequest request) {
+        return otpAuthService.verify(request.phone(), request.code());
     }
 
     @GetMapping("/me")
@@ -79,5 +114,15 @@ public class AuthController {
     @PatchMapping("/profile")
     public AuthResponse updateProfile(@Valid @RequestBody UpdateProfileRequest request) {
         return authService.updateProfile(request);
+    }
+
+    @GetMapping("/invite")
+    public StaffInvitePreviewResponse previewInvite(@RequestParam String token) {
+        return staffService.preview(token);
+    }
+
+    @PostMapping("/accept-invite")
+    public AuthResponse acceptInvite(@Valid @RequestBody AcceptInviteRequest request) {
+        return staffService.accept(request);
     }
 }

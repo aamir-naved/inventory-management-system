@@ -1,10 +1,13 @@
 export type SessionUser = {
   userId: string;
   fullName: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   emailVerified: boolean;
   businessId: string | null;
   businessName: string | null;
+  role: string | null;
+  platformRole: "PLATFORM_ADMIN" | null;
 };
 
 export type AuthSession = {
@@ -18,6 +21,10 @@ export type AuthSession = {
 
 export const AUTH_STORAGE_KEY = "ims.auth";
 
+function platformRoleFrom(value: unknown): SessionUser["platformRole"] {
+  return value === "PLATFORM_ADMIN" ? "PLATFORM_ADMIN" : null;
+}
+
 export function readStoredAuthSession(): AuthSession | null {
   const rawValue = window.localStorage.getItem(AUTH_STORAGE_KEY);
 
@@ -30,10 +37,12 @@ export function readStoredAuthSession(): AuthSession | null {
       user?: Partial<SessionUser>;
     };
 
-    if (!parsed.accessToken || !parsed.user?.userId || !parsed.user.email) {
+    if (!parsed.accessToken || !parsed.user?.userId) {
       window.localStorage.removeItem(AUTH_STORAGE_KEY);
       return null;
     }
+
+    const platformRole = platformRoleFrom(parsed.user.platformRole);
 
     return {
       accessToken: parsed.accessToken,
@@ -44,10 +53,13 @@ export function readStoredAuthSession(): AuthSession | null {
       user: {
         userId: parsed.user.userId,
         fullName: parsed.user.fullName ?? "",
-        email: parsed.user.email,
+        email: parsed.user.email ?? null,
+        phone: parsed.user.phone ?? null,
         emailVerified: Boolean(parsed.user.emailVerified),
         businessId: parsed.user.businessId ?? null,
         businessName: parsed.user.businessName ?? null,
+        role: platformRole ? null : parsed.user.role ?? null,
+        platformRole,
       },
     };
   } catch {
@@ -62,4 +74,18 @@ export function writeStoredAuthSession(session: AuthSession) {
 
 export function clearStoredAuthSession() {
   window.localStorage.removeItem(AUTH_STORAGE_KEY);
+}
+
+export function isPlatformAdmin(session: SessionUser | null | undefined) {
+  return session?.platformRole === "PLATFORM_ADMIN";
+}
+
+export function afterAuthPath(session: SessionUser | null | undefined) {
+  if (isPlatformAdmin(session)) {
+    return "/platform";
+  }
+  if (session?.businessId) {
+    return "/pos";
+  }
+  return "/welcome";
 }

@@ -76,7 +76,7 @@ class PurchaseControllerTest extends AuthenticatedControllerTestSupport {
                 .header("Authorization", authorizationHeader)
                 .header("X-Business-Id", businessId))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].currentStock").value(140.0));
+            .andExpect(jsonPath("$.items[0].currentStock").value(140.0));
     }
 
     @Test
@@ -115,9 +115,9 @@ class PurchaseControllerTest extends AuthenticatedControllerTestSupport {
                 .header("X-Business-Id", businessId)
                 .param("search", "shakti"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.length()").value(1))
-            .andExpect(jsonPath("$[0].paymentStatus").value("PARTIAL"))
-            .andExpect(jsonPath("$[0].amountPaid").value(2000.0));
+            .andExpect(jsonPath("$.items.length()").value(1))
+            .andExpect(jsonPath("$.items[0].paymentStatus").value("PARTIAL"))
+            .andExpect(jsonPath("$.items[0].amountPaid").value(2000.0));
 
         mockMvc.perform(patch("/purchases/{id}/cancel", purchaseId)
                 .header("Authorization", authorizationHeader)
@@ -136,7 +136,46 @@ class PurchaseControllerTest extends AuthenticatedControllerTestSupport {
                 .header("Authorization", authorizationHeader)
                 .header("X-Business-Id", businessId))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$[0].currentStock").value(120.0));
+            .andExpect(jsonPath("$.items[0].currentStock").value(120.0));
+    }
+
+    @Test
+    void paginatesPurchaseList() throws Exception {
+        String supplierId = createSupplier();
+        String productId = createProduct();
+
+        for (int day = 1; day <= 3; day++) {
+            mockMvc.perform(post("/purchases")
+                    .header("Authorization", authorizationHeader)
+                    .header("X-Business-Id", businessId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""
+                        {
+                          "supplierId": "%s",
+                          "purchaseDate": "2026-08-0%d",
+                          "amountPaid": 0,
+                          "notes": "Restock %d",
+                          "items": [
+                            {
+                              "productId": "%s",
+                              "quantity": 1.000,
+                              "purchasePrice": 315.00
+                            }
+                          ]
+                        }
+                        """.formatted(supplierId, day, day, productId)))
+                .andExpect(status().isCreated());
+        }
+
+        mockMvc.perform(get("/purchases")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .param("size", "2")
+                .param("page", "0"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items.length()").value(2))
+            .andExpect(jsonPath("$.totalItems").value(3))
+            .andExpect(jsonPath("$.totalPages").value(2));
     }
 
     private String createSupplier() throws Exception {

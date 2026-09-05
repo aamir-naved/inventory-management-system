@@ -8,6 +8,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/http-client";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 import { useAuth } from "@/features/auth/auth-context";
 import {
   archiveCustomer,
@@ -15,6 +16,7 @@ import {
   getCustomerSummary,
   listCustomerSales,
   listCustomers,
+  unarchiveCustomer,
   updateCustomer,
   type CustomerPayload,
   type CustomerRecord,
@@ -44,6 +46,7 @@ export function CustomersPage() {
   const { formatMoney, formatDate } = useBusinessSettings();
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
+  const [page, setPage] = useState(0);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerRecord | null>(null);
   const [form, setForm] = useState<CustomerPayload>(initialForm);
@@ -51,11 +54,12 @@ export function CustomersPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const customersQuery = useQuery({
-    queryKey: ["customers", businessId, deferredSearch, includeArchived],
+    queryKey: ["customers", businessId, deferredSearch, includeArchived, page],
     queryFn: () =>
       listCustomers(businessId!, {
         search: deferredSearch,
         includeArchived,
+        page,
       }),
     enabled: Boolean(businessId),
   });
@@ -80,6 +84,10 @@ export function CustomersPage() {
 
     setForm(toPayload(selectedCustomer));
   }, [selectedCustomer]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [deferredSearch, includeArchived]);
 
   const saveMutation = useMutation({
     mutationFn: async (payload: CustomerPayload) => {
@@ -128,7 +136,7 @@ export function CustomersPage() {
       return archiveCustomer(businessId, customer.id);
     },
     onSuccess: async (customer) => {
-      setFeedback(`${customer.name} archived.`);
+      setFeedback(`${customer.name} archived and hidden from the default list.`);
       if (selectedCustomer?.id === customer.id) {
         setSelectedCustomer(null);
       }
@@ -140,6 +148,27 @@ export function CustomersPage() {
     },
     onError: () => {
       setFeedback("Unable to archive customer.");
+    },
+  });
+
+  const unarchiveMutation = useMutation({
+    mutationFn: async (customer: CustomerRecord) => {
+      if (!businessId) {
+        throw new Error("Business setup is required before customers can be managed.");
+      }
+
+      return unarchiveCustomer(businessId, customer.id);
+    },
+    onSuccess: async (customer) => {
+      setFeedback(`${customer.name} restored to the default list.`);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["customers", businessId] }),
+        queryClient.invalidateQueries({ queryKey: ["customer-summary", businessId, customer.id] }),
+        queryClient.invalidateQueries({ queryKey: ["customer-sales", businessId, customer.id] }),
+      ]);
+    },
+    onError: () => {
+      setFeedback("Unable to restore customer.");
     },
   });
 
@@ -166,7 +195,7 @@ export function CustomersPage() {
       <section className="empty-state">
         <span className="brand-kicker">Business required</span>
         <h1>Finish business setup before managing customers.</h1>
-        <p>Customers are tenant-scoped, so we need the business profile saved first.</p>
+        <p>Set up your business first so customers belong to the right shop.</p>
       </section>
     );
   }
@@ -178,7 +207,8 @@ export function CustomersPage() {
         <h1>Keep customer contacts, outstanding balances, and sale history in one place.</h1>
         <p>
           Create and update customers here, then open any party to see what they owe and every
-          sale tied to them.
+          sale tied to them. Archive hides a customer from the default list; use Show archived
+          to find them, then Restore to bring them back.
         </p>
       </section>
 
@@ -256,7 +286,11 @@ export function CustomersPage() {
           <div className="panel-heading">
             <div>
               <h3>Customers</h3>
-              <p>Search by name, contact, or mobile.</p>
+              <p>
+                Search by name, contact, or mobile. Archived customers stay saved but are
+                hidden unless Show archived is on. Restore puts them back on the default
+                list.
+              </p>
             </div>
             <label className="toggle">
               <input
@@ -280,7 +314,7 @@ export function CustomersPage() {
 
           {customersQuery.isLoading ? <p className="inline-note">Loading customers...</p> : null}
 
-          {!customersQuery.isLoading && (customersQuery.data?.length ?? 0) === 0 ? (
+          {!customersQuery.isLoading && (customersQuery.data?.totalItems ?? 0) === 0 ? (
             <div className="empty-inline-state">
               <strong>No customers yet</strong>
               <p>Create your first customer to track sales and dues.</p>
@@ -288,7 +322,7 @@ export function CustomersPage() {
           ) : null}
 
           <div className="product-list">
-            {customersQuery.data?.map((customer) => (
+            {customersQuery.data?.items.map((customer) => (
               <article
                 key={customer.id}
                 className={`product-card${
@@ -339,11 +373,21 @@ export function CustomersPage() {
                     >
                       Archive
                     </button>
-                  ) : null}
+                  ) : (
+                    <button
+                      type="button"
+                      className="ghost-button"
+                      disabled={unarchiveMutation.isPending}
+                      onClick={() => unarchiveMutation.mutate(customer)}
+                    >
+                      Restore
+                    </button>
+                  )}
                 </div>
               </article>
             ))}
           </div>
+          <PaginationBar page={customersQuery.data} onPageChange={setPage} />
         </article>
       </section>
 

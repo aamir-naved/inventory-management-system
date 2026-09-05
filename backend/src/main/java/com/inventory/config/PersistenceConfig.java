@@ -12,7 +12,7 @@ import java.util.Optional;
 
 @Configuration
 @EnableJpaAuditing(dateTimeProviderRef = "auditingDateTimeProvider")
-@EnableConfigurationProperties({TenantProperties.class, AuthProperties.class})
+@EnableConfigurationProperties({TenantProperties.class, AuthProperties.class, PlatformProperties.class})
 public class PersistenceConfig {
 
     @Bean

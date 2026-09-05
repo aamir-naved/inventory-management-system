@@ -23,6 +23,11 @@ public record SaleResponse(
     boolean cancelled,
     String cancellationReason,
     boolean hasReturns,
+    boolean interstate,
+    BigDecimal taxableAmount,
+    BigDecimal cgstAmount,
+    BigDecimal sgstAmount,
+    BigDecimal igstAmount,
     List<SaleItemResponse> items,
     OffsetDateTime createdAt,
     OffsetDateTime updatedAt

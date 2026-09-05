@@ -7,13 +7,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.auth")
 public class AuthProperties {
 
-    private String jwtSecret = "inventory-management-system-super-secret-key-for-development-only-2026";
+    private String jwtSecret;
     private Duration accessTokenTtl = Duration.ofHours(1);
     private Duration refreshTokenTtl = Duration.ofDays(14);
     private Duration emailVerifyTokenTtl = Duration.ofHours(24);
     private Duration passwordResetTokenTtl = Duration.ofHours(1);
     private String publicAppUrl = "http://localhost:5173";
     private String mailFrom = "noreply@inventory.local";
+    private Duration phoneOtpTtl = Duration.ofMinutes(5);
+    private int phoneOtpResendSeconds = 45;
+    private String smsWebhookUrl;
 
     public String getJwtSecret() {
         return jwtSecret;
@@ -69,5 +72,29 @@ public class AuthProperties {
 
     public void setMailFrom(String mailFrom) {
         this.mailFrom = mailFrom;
+    }
+
+    public Duration getPhoneOtpTtl() {
+        return phoneOtpTtl;
+    }
+
+    public void setPhoneOtpTtl(Duration phoneOtpTtl) {
+        this.phoneOtpTtl = phoneOtpTtl;
+    }
+
+    public int getPhoneOtpResendSeconds() {
+        return phoneOtpResendSeconds;
+    }
+
+    public void setPhoneOtpResendSeconds(int phoneOtpResendSeconds) {
+        this.phoneOtpResendSeconds = phoneOtpResendSeconds;
+    }
+
+    public String getSmsWebhookUrl() {
+        return smsWebhookUrl;
+    }
+
+    public void setSmsWebhookUrl(String smsWebhookUrl) {
+        this.smsWebhookUrl = smsWebhookUrl;
     }
 }

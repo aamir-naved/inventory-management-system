@@ -40,12 +40,37 @@ public class SettingsService {
         business.setDateFormat(validateDateFormat(request.dateFormat().trim()));
         business.setAllowNegativeStock(Boolean.TRUE.equals(request.allowNegativeStock()));
         business.setDefaultLowStockThreshold(request.defaultLowStockThreshold());
+        if (request.gstEnabled() != null) {
+            business.setGstEnabled(request.gstEnabled());
+        }
+        if (request.gstin() != null) {
+            business.setGstin(normalizeGstin(request.gstin()));
+        }
+        if (request.stateCode() != null) {
+            business.setStateCode(normalizeStateCode(request.stateCode()));
+        }
+        if (request.stateName() != null) {
+            business.setStateName(normalizeName(request.stateName()));
+        }
+        if (request.gstInclusivePricing() != null) {
+            business.setGstInclusivePricing(request.gstInclusivePricing());
+        }
         return toResponse(business);
     }
 
     @Transactional(readOnly = true)
     public boolean isNegativeStockAllowed() {
         return findCurrentBusiness().isAllowNegativeStock();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isGstEnabled() {
+        return findCurrentBusiness().isGstEnabled();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isGstInclusivePricing() {
+        return findCurrentBusiness().isGstInclusivePricing();
     }
 
     private Business findCurrentBusiness() {
@@ -71,7 +96,27 @@ public class SettingsService {
             business.getCurrencyCode(),
             business.getDateFormat(),
             business.isAllowNegativeStock(),
-            business.getDefaultLowStockThreshold()
+            business.getDefaultLowStockThreshold(),
+            business.isGstEnabled(),
+            business.getGstin(),
+            business.getStateCode(),
+            business.getStateName(),
+            business.isGstInclusivePricing()
         );
+    }
+
+    private String normalizeGstin(String value) {
+        String trimmed = value.trim().toUpperCase();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String normalizeStateCode(String value) {
+        String trimmed = value.trim().toUpperCase();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String normalizeName(String value) {
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

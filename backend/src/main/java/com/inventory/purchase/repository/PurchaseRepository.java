@@ -1,6 +1,8 @@
 package com.inventory.purchase.repository;
 
 import com.inventory.purchase.entity.Purchase;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -43,17 +45,34 @@ public interface PurchaseRepository extends JpaRepository<Purchase, UUID> {
         @Param("toDate") LocalDate toDate
     );
 
-    @Query("""
-        select p from Purchase p
-        join p.supplier s
-        where p.businessId = :businessId
-          and (
-            :searchTerm = ''
-            or lower(p.purchaseNumber) like lower(concat('%', :searchTerm, '%'))
-            or lower(s.name) like lower(concat('%', :searchTerm, '%'))
-            or lower(coalesce(p.notes, '')) like lower(concat('%', :searchTerm, '%'))
-          )
-        order by p.purchaseDate desc, p.createdAt desc
-        """)
-    List<Purchase> search(UUID businessId, String searchTerm);
+    @Query(
+        value = """
+            select p from Purchase p
+            join p.supplier s
+            where p.businessId = :businessId
+              and (
+                :searchTerm = ''
+                or lower(p.purchaseNumber) like lower(concat('%', :searchTerm, '%'))
+                or lower(s.name) like lower(concat('%', :searchTerm, '%'))
+                or lower(coalesce(p.notes, '')) like lower(concat('%', :searchTerm, '%'))
+              )
+            order by p.purchaseDate desc, p.createdAt desc
+            """,
+        countQuery = """
+            select count(p) from Purchase p
+            join p.supplier s
+            where p.businessId = :businessId
+              and (
+                :searchTerm = ''
+                or lower(p.purchaseNumber) like lower(concat('%', :searchTerm, '%'))
+                or lower(s.name) like lower(concat('%', :searchTerm, '%'))
+                or lower(coalesce(p.notes, '')) like lower(concat('%', :searchTerm, '%'))
+              )
+            """
+    )
+    Page<Purchase> search(
+        @Param("businessId") UUID businessId,
+        @Param("searchTerm") String searchTerm,
+        Pageable pageable
+    );
 }

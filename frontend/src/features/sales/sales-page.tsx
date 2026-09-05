@@ -1,5 +1,6 @@
 import {
   useDeferredValue,
+  useEffect,
   useMemo,
   useState,
   type FormEvent,
@@ -7,15 +8,20 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/http-client";
+import { EntityPicker } from "@/components/ui/entity-picker";
 import { FieldInfo, FieldLabel } from "@/components/ui/field-label";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 import { useAuth } from "@/features/auth/auth-context";
+import { computeGstLine } from "@/lib/gst";
 import { useBusinessSettings } from "@/features/settings/use-business-settings";
 import {
   createCustomer,
+  getCustomer,
   listCustomers,
   type CustomerPayload,
+  type CustomerRecord,
 } from "@/features/customers/customer-api";
-import { listProducts, type ProductRecord } from "@/features/products/product-api";
+import { getProduct, listProducts, type ProductRecord } from "@/features/products/product-api";
 import {
   createSalePayment,
   listSalePayments,
@@ -24,6 +30,7 @@ import {
 import {
   downloadSaleInvoice,
   printSaleInvoice,
+  shareSaleInvoice,
 } from "@/features/documents/document-api";
 import {
   parseNumericDraft,
@@ -34,6 +41,7 @@ import {
   cancelSale,
   createSale,
   createSaleReturn,
+  getSale,
   listSaleReturns,
   listSales,
   updateSale,
@@ -45,6 +53,7 @@ type SaleItemDraft = {
   productId: string;
   quantity: NumericDraft;
   sellingPrice: NumericDraft;
+  gstRate: number;
 };
 
 type SaleFormState = {
@@ -52,6 +61,7 @@ type SaleFormState = {
   saleDate: string;
   amountPaid: NumericDraft;
   notes: string;
+  interstate: boolean;
   items: SaleItemDraft[];
 };
 
@@ -80,6 +90,7 @@ const initialSale: SaleFormState = {
   saleDate: new Date().toISOString().slice(0, 10),
   amountPaid: "",
   notes: "",
+  interstate: false,
   items: [],
 };
 
@@ -94,15 +105,26 @@ function emptyItem(product?: ProductRecord): SaleItemDraft {
     productId: product?.id ?? "",
     quantity: "",
     sellingPrice: product ? Number(product.sellingPrice) : "",
+    gstRate: product ? Number(product.gstRate ?? 0) : 0,
   };
 }
 
-function summarizeTotal(items: SaleItemDraft[]) {
-  return items.reduce(
-    (total, item) =>
-      total + resolveNumericDraft(item.quantity) * resolveNumericDraft(item.sellingPrice),
-    0,
-  );
+function summarizeTotal(
+  items: SaleItemDraft[],
+  gstEnabled: boolean,
+  inclusive: boolean,
+  interstate: boolean,
+) {
+  return items.reduce((total, item) => {
+    const line = computeGstLine(
+      resolveNumericDraft(item.quantity),
+      resolveNumericDraft(item.sellingPrice),
+      gstEnabled ? item.gstRate : 0,
+      inclusive,
+      interstate,
+    );
+    return total + line.lineTotal;
+  }, 0);
 }
 
 function toSalePayload(form: SaleFormState): SalePayload {
@@ -111,10 +133,12 @@ function toSalePayload(form: SaleFormState): SalePayload {
     saleDate: form.saleDate,
     amountPaid: resolveNumericDraft(form.amountPaid),
     notes: form.notes,
+    interstate: form.interstate,
     items: form.items.map((item) => ({
       productId: item.productId,
       quantity: resolveNumericDraft(item.quantity),
       sellingPrice: resolveNumericDraft(item.sellingPrice),
+      gstRate: item.gstRate,
     })),
   };
 }
@@ -123,11 +147,16 @@ export function SalesPage() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const businessId = session?.businessId ?? null;
-  const { formatMoney, formatDate } = useBusinessSettings();
+  const { formatMoney, formatDate, gstEnabled, gstInclusivePricing } = useBusinessSettings();
   const [customerForm, setCustomerForm] = useState<CustomerPayload>(initialCustomer);
   const [saleForm, setSaleForm] = useState<SaleFormState>(initialSale);
   const [saleSearch, setSaleSearch] = useState("");
   const deferredSaleSearch = useDeferredValue(saleSearch);
+  const [salePage, setSalePage] = useState(0);
+  const [customerListSearch, setCustomerListSearch] = useState("");
+  const deferredCustomerListSearch = useDeferredValue(customerListSearch);
+  const [customerListPage, setCustomerListPage] = useState(0);
+  const [knownProducts, setKnownProducts] = useState<Record<string, ProductRecord>>({});
   const [selectedSale, setSelectedSale] = useState<SaleRecord | null>(null);
   const [cancellationReason, setCancellationReason] = useState("");
   const [returnForm, setReturnForm] = useState<ReturnFormState>({
@@ -140,21 +169,19 @@ export function SalesPage() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  const productsQuery = useQuery({
-    queryKey: ["products", businessId, "", false],
-    queryFn: () => listProducts({ businessId: businessId! }),
-    enabled: Boolean(businessId),
-  });
-
   const customersQuery = useQuery({
-    queryKey: ["customers", businessId],
-    queryFn: () => listCustomers(businessId!),
+    queryKey: ["customers", businessId, deferredCustomerListSearch, false, customerListPage],
+    queryFn: () =>
+      listCustomers(businessId!, {
+        search: deferredCustomerListSearch,
+        page: customerListPage,
+      }),
     enabled: Boolean(businessId),
   });
 
   const salesQuery = useQuery({
-    queryKey: ["sales", businessId, deferredSaleSearch],
-    queryFn: () => listSales(businessId!, deferredSaleSearch),
+    queryKey: ["sales", businessId, deferredSaleSearch, salePage],
+    queryFn: () => listSales(businessId!, deferredSaleSearch, { page: salePage }),
     enabled: Boolean(businessId),
   });
 
@@ -169,6 +196,14 @@ export function SalesPage() {
     queryFn: () => listSalePayments(businessId!, selectedSale!.id),
     enabled: Boolean(businessId && selectedSale?.id),
   });
+
+  useEffect(() => {
+    setSalePage(0);
+  }, [deferredSaleSearch]);
+
+  useEffect(() => {
+    setCustomerListPage(0);
+  }, [deferredCustomerListSearch]);
 
   const customerMutation = useMutation({
     mutationFn: async (payload: CustomerPayload) => {
@@ -261,11 +296,9 @@ export function SalesPage() {
         queryClient.invalidateQueries({ queryKey: ["sale-payments", businessId] }),
       ]);
 
-      const sales = await queryClient.fetchQuery({
-        queryKey: ["sales", businessId, deferredSaleSearch],
-        queryFn: () => listSales(businessId!, deferredSaleSearch),
-      });
-      const refreshed = sales.find((sale) => sale.id === selectedSale?.id);
+      const refreshed = selectedSale
+        ? await getSale(businessId!, selectedSale.id)
+        : null;
       if (refreshed) {
         setSelectedSale(refreshed);
       }
@@ -335,14 +368,8 @@ export function SalesPage() {
         queryClient.invalidateQueries({ queryKey: ["products", businessId] }),
       ]);
 
-      const sales = await queryClient.fetchQuery({
-        queryKey: ["sales", businessId, deferredSaleSearch],
-        queryFn: () => listSales(businessId!, deferredSaleSearch),
-      });
-      const refreshed = sales.find((sale) => sale.id === saleReturn.saleId);
-      if (refreshed) {
-        selectSale(refreshed);
-      }
+      const refreshed = await getSale(businessId!, saleReturn.saleId);
+      selectSale(refreshed);
     },
     onError: (error) => {
       if (error instanceof Error && !(error instanceof ApiError)) {
@@ -368,7 +395,10 @@ export function SalesPage() {
     setFeedback("Request failed.");
   }
 
-  const saleTotal = useMemo(() => summarizeTotal(saleForm.items), [saleForm.items]);
+  const saleTotal = useMemo(
+    () => summarizeTotal(saleForm.items, gstEnabled, gstInclusivePricing, saleForm.interstate),
+    [saleForm.items, saleForm.interstate, gstEnabled, gstInclusivePricing],
+  );
   const amountPaidNow = resolveNumericDraft(saleForm.amountPaid);
   const outstandingAfterSave = Math.max(saleTotal - amountPaidNow, 0);
 
@@ -429,10 +459,9 @@ export function SalesPage() {
   }
 
   function addItem() {
-    const firstProduct = productsQuery.data?.[0];
     setSaleForm((current) => ({
       ...current,
-      items: [...current.items, emptyItem(firstProduct)],
+      items: [...current.items, emptyItem()],
     }));
   }
 
@@ -487,7 +516,7 @@ export function SalesPage() {
       <section className="empty-state">
         <span className="brand-kicker">Business required</span>
         <h1>Finish business setup before recording sales.</h1>
-        <p>Sales are tenant-scoped and need the business profile first.</p>
+        <p>Set up your business first so sales belong to the right shop.</p>
       </section>
     );
   }
@@ -570,8 +599,18 @@ export function SalesPage() {
             </button>
           </form>
 
+          <div className="field">
+            <label htmlFor="sale-customer-search">Search customers</label>
+            <input
+              id="sale-customer-search"
+              value={customerListSearch}
+              onChange={(event) => setCustomerListSearch(event.target.value)}
+              placeholder="Search customers"
+            />
+          </div>
+
           <div className="supplier-list">
-            {customersQuery.data?.map((customer) => (
+            {customersQuery.data?.items.map((customer) => (
               <button
                 key={customer.id}
                 type="button"
@@ -587,6 +626,7 @@ export function SalesPage() {
               </button>
             ))}
           </div>
+          <PaginationBar page={customersQuery.data} onPageChange={setCustomerListPage} />
         </article>
 
         <article className="panel">
@@ -608,20 +648,20 @@ export function SalesPage() {
                   label="Customer"
                   info="Who you sold to. Create a customer on the left if they are not listed yet."
                 />
-                <select
+                <EntityPicker
                   id="sale-customer"
                   value={saleForm.customerId}
-                  onChange={(event) =>
-                    setSaleForm((current) => ({ ...current, customerId: event.target.value }))
+                  enabled={Boolean(businessId)}
+                  placeholder="Search customers"
+                  queryKey={["customers", businessId]}
+                  fetchPage={(search) => listCustomers(businessId!, { search })}
+                  fetchById={(id) => getCustomer(businessId!, id)}
+                  getId={(customer: CustomerRecord) => customer.id}
+                  getLabel={(customer: CustomerRecord) => customer.name}
+                  onChange={(customerId) =>
+                    setSaleForm((current) => ({ ...current, customerId }))
                   }
-                >
-                  <option value="">Select customer</option>
-                  {customersQuery.data?.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </option>
-                  ))}
-                </select>
+                />
                 {fieldErrors.customerId ? <span className="field-error">{fieldErrors.customerId}</span> : null}
               </div>
 
@@ -641,6 +681,19 @@ export function SalesPage() {
                 />
               </div>
             </div>
+
+            {gstEnabled ? (
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={saleForm.interstate}
+                  onChange={(event) =>
+                    setSaleForm((current) => ({ ...current, interstate: event.target.checked }))
+                  }
+                />
+                <span>Interstate supply (charge IGST instead of CGST/SGST)</span>
+              </label>
+            ) : null}
 
             <div className="split-grid">
               <div className="field">
@@ -711,7 +764,7 @@ export function SalesPage() {
               ) : null}
 
               {saleForm.items.map((item, index) => {
-                const product = productsQuery.data?.find((candidate) => candidate.id === item.productId);
+                const product = knownProducts[item.productId];
                 const lineTotal =
                   resolveNumericDraft(item.quantity) * resolveNumericDraft(item.sellingPrice);
 
@@ -724,29 +777,37 @@ export function SalesPage() {
                           label="Product"
                           info="The catalog product being sold. Stock will decrease for this product."
                         />
-                        <select
+                        <EntityPicker
                           id={`sale-item-product-${index}`}
                           value={item.productId}
-                          onChange={(event) => {
-                            const selected = productsQuery.data?.find(
-                              (candidate) => candidate.id === event.target.value,
-                            );
+                          enabled={Boolean(businessId)}
+                          placeholder="Search products"
+                          queryKey={["products", businessId]}
+                          fetchPage={(search) => listProducts({ businessId: businessId!, search })}
+                          fetchById={(id) => getProduct(businessId!, id)}
+                          getId={(productOption: ProductRecord) => productOption.id}
+                          getLabel={(productOption: ProductRecord) =>
+                            productOption.sku
+                              ? `${productOption.name} (${productOption.sku})`
+                              : productOption.name
+                          }
+                          onChange={(productId, selected) => {
+                            if (selected) {
+                              setKnownProducts((current) => ({
+                                ...current,
+                                [selected.id]: selected,
+                              }));
+                            }
                             updateItem(index, {
                               ...item,
-                              productId: event.target.value,
+                              productId,
                               sellingPrice: selected
                                 ? Number(selected.sellingPrice)
                                 : item.sellingPrice,
+                              gstRate: selected ? Number(selected.gstRate ?? 0) : item.gstRate,
                             });
                           }}
-                        >
-                          <option value="">Select product</option>
-                          {productsQuery.data?.map((productOption: ProductRecord) => (
-                            <option key={productOption.id} value={productOption.id}>
-                              {productOption.name}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </div>
 
                       <div className="field">
@@ -864,7 +925,7 @@ export function SalesPage() {
           </div>
 
           <div className="product-list">
-            {salesQuery.data?.map((sale) => (
+            {salesQuery.data?.items.map((sale) => (
               <article
                 key={sale.id}
                 className={`product-card${selectedSale?.id === sale.id ? " product-card--selected" : ""}`}
@@ -904,6 +965,7 @@ export function SalesPage() {
               </article>
             ))}
           </div>
+          <PaginationBar page={salesQuery.data} onPageChange={setSalePage} />
         </article>
 
         {selectedSale ? (
@@ -956,6 +1018,33 @@ export function SalesPage() {
               <button
                 type="button"
                 className="primary-button"
+                onClick={async () => {
+                  try {
+                    setFeedback(null);
+                    const result = await shareSaleInvoice(
+                      businessId,
+                      selectedSale.id,
+                      selectedSale.saleNumber,
+                    );
+                    if (result === "shared") {
+                      setFeedback("Invoice shared.");
+                    } else if (result === "downloaded") {
+                      setFeedback("Invoice downloaded. Attach the PDF in WhatsApp.");
+                    }
+                  } catch (error) {
+                    if (error instanceof Error && !(error instanceof ApiError)) {
+                      setFeedback(error.message);
+                      return;
+                    }
+                    handleApiError(error);
+                  }
+                }}
+              >
+                Share bill
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
                 onClick={async () => {
                   try {
                     setFeedback(null);

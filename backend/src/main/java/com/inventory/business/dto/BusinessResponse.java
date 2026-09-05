@@ -11,6 +11,12 @@ public record BusinessResponse(
     String mobileNumber,
     String currencyCode,
     String timeZone,
+    boolean gstEnabled,
+    String gstin,
+    String stateCode,
+    String stateName,
+    boolean gstInclusivePricing,
+    boolean hasLogo,
     boolean active,
     OffsetDateTime createdAt,
     OffsetDateTime updatedAt

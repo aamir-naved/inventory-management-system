@@ -1,6 +1,8 @@
 package com.inventory.sales.repository;
 
 import com.inventory.sales.entity.Sale;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -42,17 +44,40 @@ public interface SaleRepository extends JpaRepository<Sale, UUID> {
         @Param("toDate") LocalDate toDate
     );
 
-    @Query("""
-        select s from Sale s
-        join s.customer c
-        where s.businessId = :businessId
-          and (
-            :searchTerm = ''
-            or lower(s.saleNumber) like lower(concat('%', :searchTerm, '%'))
-            or lower(c.name) like lower(concat('%', :searchTerm, '%'))
-            or lower(coalesce(s.notes, '')) like lower(concat('%', :searchTerm, '%'))
-          )
-        order by s.saleDate desc, s.createdAt desc
-        """)
-    List<Sale> search(UUID businessId, String searchTerm);
+    @Query(
+        value = """
+            select s from Sale s
+            join s.customer c
+            where s.businessId = :businessId
+              and (
+                :searchTerm = ''
+                or lower(s.saleNumber) like lower(concat('%', :searchTerm, '%'))
+                or lower(c.name) like lower(concat('%', :searchTerm, '%'))
+                or lower(coalesce(s.notes, '')) like lower(concat('%', :searchTerm, '%'))
+              )
+            order by s.saleDate desc, s.createdAt desc
+            """,
+        countQuery = """
+            select count(s) from Sale s
+            join s.customer c
+            where s.businessId = :businessId
+              and (
+                :searchTerm = ''
+                or lower(s.saleNumber) like lower(concat('%', :searchTerm, '%'))
+                or lower(c.name) like lower(concat('%', :searchTerm, '%'))
+                or lower(coalesce(s.notes, '')) like lower(concat('%', :searchTerm, '%'))
+              )
+            """
+    )
+    Page<Sale> search(
+        @Param("businessId") UUID businessId,
+        @Param("searchTerm") String searchTerm,
+        Pageable pageable
+    );
+
+    @Query("select count(s) from Sale s where s.cancelled = false and s.saleDate = :saleDate")
+    long countActiveBySaleDate(@Param("saleDate") LocalDate saleDate);
+
+    @Query("select coalesce(sum(s.totalAmount), 0) from Sale s where s.cancelled = false and s.saleDate = :saleDate")
+    java.math.BigDecimal sumTotalBySaleDate(@Param("saleDate") LocalDate saleDate);
 }

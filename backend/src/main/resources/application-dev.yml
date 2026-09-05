@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/inventory_management_dev}
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/inventory_management}
     username: ${DB_USERNAME:inventory_user}
     password: ${DB_PASSWORD:inventory_password}
   jpa:
@@ -8,6 +8,11 @@ spring:
     properties:
       hibernate:
         format_sql: true
+
+app:
+  auth:
+    jwt-secret: ${APP_JWT_SECRET:inventory-management-system-super-secret-key-for-development-only-2026}
+
 logging:
   level:
     org.hibernate.SQL: DEBUG

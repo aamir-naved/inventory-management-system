@@ -1,4 +1,5 @@
 import { httpClient } from "@/api/http-client";
+import { saveFileDownload } from "@/api/download-client";
 
 export type InventoryReport = {
   generatedAt: string;
@@ -126,7 +127,47 @@ export async function getCustomerOutstandingReport(businessId: string) {
 }
 
 export async function getSupplierOutstandingReport(businessId: string) {
-  return httpClient<SupplierOutstandingReport>("/reports/outstanding/suppliers", {
+  return httpClient<SupplierOutstandingReport>(`/reports/outstanding/suppliers`, {
     businessId,
   });
+}
+
+export type GstReport = {
+  generatedAt: string;
+  from: string | null;
+  to: string | null;
+  taxableAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  totalTax: number;
+  rows: Array<{
+    documentType: string;
+    documentNumber: string;
+    documentDate: string;
+    partyName: string;
+    interstate: boolean;
+    gstRate: number;
+    taxableAmount: number;
+    cgstAmount: number;
+    sgstAmount: number;
+    igstAmount: number;
+  }>;
+};
+
+export async function getGstReport(businessId: string, filters: ReportDateFilters = {}) {
+  return httpClient<GstReport>(withDateQuery("/reports/gst", filters), { businessId });
+}
+
+export async function downloadReportExcel(
+  businessId: string,
+  path: string,
+  filename: string,
+) {
+  return saveFileDownload(
+    path,
+    businessId,
+    filename,
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
 }

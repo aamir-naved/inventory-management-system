@@ -1,5 +1,7 @@
 package com.inventory.supplier.service;
 
+import com.inventory.common.api.PagedResponse;
+import com.inventory.common.api.Pagination;
 import com.inventory.common.tenant.TenantContext;
 import com.inventory.payment.support.PaymentAmounts;
 import com.inventory.purchase.entity.Purchase;
@@ -46,11 +48,21 @@ public class SupplierService {
     }
 
     @Transactional(readOnly = true)
-    public List<SupplierResponse> list(String search, boolean includeArchived) {
-        return supplierRepository.search(requireBusinessId(), normalizeSearch(search), includeArchived)
-            .stream()
-            .map(this::toResponse)
-            .toList();
+    public PagedResponse<SupplierResponse> list(
+        String search,
+        boolean includeArchived,
+        Integer page,
+        Integer size
+    ) {
+        return Pagination.map(
+            supplierRepository.search(
+                requireBusinessId(),
+                normalizeSearch(search),
+                includeArchived,
+                Pagination.pageable(page, size)
+            ),
+            this::toResponse
+        );
     }
 
     @Transactional(readOnly = true)
@@ -114,6 +126,12 @@ public class SupplierService {
     public SupplierResponse archive(UUID id) {
         Supplier supplier = findSupplier(id);
         supplier.setArchived(true);
+        return toResponse(supplier);
+    }
+
+    public SupplierResponse unarchive(UUID id) {
+        Supplier supplier = findSupplier(id);
+        supplier.setArchived(false);
         return toResponse(supplier);
     }
 

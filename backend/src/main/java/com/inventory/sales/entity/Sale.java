@@ -48,6 +48,21 @@ public class Sale extends TenantAwareEntity {
     @Column(name = "cancellation_reason", length = 255)
     private String cancellationReason;
 
+    @Column(name = "interstate", nullable = false)
+    private boolean interstate;
+
+    @Column(name = "taxable_amount", nullable = false, precision = 19, scale = 2)
+    private BigDecimal taxableAmount = BigDecimal.ZERO;
+
+    @Column(name = "cgst_amount", nullable = false, precision = 19, scale = 2)
+    private BigDecimal cgstAmount = BigDecimal.ZERO;
+
+    @Column(name = "sgst_amount", nullable = false, precision = 19, scale = 2)
+    private BigDecimal sgstAmount = BigDecimal.ZERO;
+
+    @Column(name = "igst_amount", nullable = false, precision = 19, scale = 2)
+    private BigDecimal igstAmount = BigDecimal.ZERO;
+
     @OneToMany(mappedBy = "sale", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<SaleItem> items = new ArrayList<>();
 
@@ -69,6 +84,16 @@ public class Sale extends TenantAwareEntity {
     public void setCancelled(boolean cancelled) { this.cancelled = cancelled; }
     public String getCancellationReason() { return cancellationReason; }
     public void setCancellationReason(String cancellationReason) { this.cancellationReason = cancellationReason; }
+    public boolean isInterstate() { return interstate; }
+    public void setInterstate(boolean interstate) { this.interstate = interstate; }
+    public BigDecimal getTaxableAmount() { return taxableAmount; }
+    public void setTaxableAmount(BigDecimal taxableAmount) { this.taxableAmount = taxableAmount; }
+    public BigDecimal getCgstAmount() { return cgstAmount; }
+    public void setCgstAmount(BigDecimal cgstAmount) { this.cgstAmount = cgstAmount; }
+    public BigDecimal getSgstAmount() { return sgstAmount; }
+    public void setSgstAmount(BigDecimal sgstAmount) { this.sgstAmount = sgstAmount; }
+    public BigDecimal getIgstAmount() { return igstAmount; }
+    public void setIgstAmount(BigDecimal igstAmount) { this.igstAmount = igstAmount; }
     public List<SaleItem> getItems() { return items; }
     public void setItems(List<SaleItem> items) { this.items = items; }
 }

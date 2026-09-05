@@ -69,8 +69,8 @@ export function VerifyEmailPage() {
 
         <div className="form-stack">
           {isAuthenticated ? (
-            <Link to="/dashboard" className="primary-button">
-              Go to dashboard
+            <Link to="/pos" className="primary-button">
+              Go to the counter
             </Link>
           ) : (
             <Link to="/login" className="primary-button">

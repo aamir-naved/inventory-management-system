@@ -29,6 +29,19 @@ public record BusinessRequest(
 
     @NotBlank(message = "Time zone is required")
     @Size(max = 50, message = "Time zone must be 50 characters or fewer")
-    String timeZone
+    String timeZone,
+
+    Boolean gstEnabled,
+
+    @Size(max = 15, message = "GSTIN must be 15 characters or fewer")
+    String gstin,
+
+    @Size(max = 2, message = "State code must be 2 characters")
+    String stateCode,
+
+    @Size(max = 100, message = "State name must be 100 characters or fewer")
+    String stateName,
+
+    Boolean gstInclusivePricing
 ) {
 }

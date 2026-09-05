@@ -7,6 +7,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
@@ -31,9 +32,19 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.BAD_REQUEST, "Validation failed", fieldErrors);
     }
 
+    @ExceptionHandler(com.inventory.common.api.ForbiddenException.class)
+    public ResponseEntity<ApiErrorResponse> handleForbidden(ForbiddenException exception) {
+        return buildResponse(HttpStatus.FORBIDDEN, exception.getMessage(), Map.of());
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiErrorResponse> handleIllegalArgument(IllegalArgumentException exception) {
         return buildResponse(HttpStatus.BAD_REQUEST, exception.getMessage(), Map.of());
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiErrorResponse> handleMaxUploadSize(MaxUploadSizeExceededException exception) {
+        return buildResponse(HttpStatus.BAD_REQUEST, "Excel file must be 2 MB or smaller", Map.of());
     }
 
     private ResponseEntity<ApiErrorResponse> buildResponse(

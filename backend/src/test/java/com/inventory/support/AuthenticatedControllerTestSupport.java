@@ -1,6 +1,7 @@
 package com.inventory.support;
 
 import com.inventory.auth.entity.BusinessMembership;
+import com.inventory.auth.entity.PlatformRole;
 import com.inventory.auth.entity.UserAccount;
 import com.inventory.auth.repository.BusinessMembershipRepository;
 import com.inventory.auth.repository.UserAccountRepository;
@@ -26,6 +27,17 @@ public abstract class AuthenticatedControllerTestSupport {
 
     @Autowired
     protected JwtService jwtService;
+
+    protected UserAccount createPlatformAdmin() {
+        UserAccount userAccount = new UserAccount();
+        userAccount.setFullName("Platform Admin");
+        userAccount.setEmail("admin-" + System.nanoTime() + "@example.com");
+        userAccount.setPasswordHash(passwordEncoder.encode("password123"));
+        userAccount.setEmailVerified(true);
+        userAccount.setActive(true);
+        userAccount.setPlatformRole(PlatformRole.PLATFORM_ADMIN);
+        return userAccountRepository.save(userAccount);
+    }
 
     protected UserAccount createUserAccount() {
         UserAccount userAccount = new UserAccount();

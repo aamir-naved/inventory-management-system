@@ -33,6 +33,8 @@ export function useBusinessSettings() {
     dateFormat,
     defaultLowStockThreshold,
     allowNegativeStock,
+    gstEnabled: settingsQuery.data?.gstEnabled ?? false,
+    gstInclusivePricing: settingsQuery.data?.gstInclusivePricing ?? false,
     formatMoney: (value: number | undefined | null) =>
       formatMoney(value, currencyCode),
     formatDate: (value: string | Date | null | undefined) =>

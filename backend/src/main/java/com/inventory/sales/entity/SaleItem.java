@@ -32,6 +32,24 @@ public class SaleItem extends AuditableEntity {
     @Column(name = "line_total", nullable = false, precision = 19, scale = 2)
     private BigDecimal lineTotal;
 
+    @Column(name = "hsn_code", length = 8)
+    private String hsnCode;
+
+    @Column(name = "gst_rate", nullable = false, precision = 5, scale = 2)
+    private BigDecimal gstRate = BigDecimal.ZERO;
+
+    @Column(name = "taxable_amount", nullable = false, precision = 19, scale = 2)
+    private BigDecimal taxableAmount = BigDecimal.ZERO;
+
+    @Column(name = "cgst_amount", nullable = false, precision = 19, scale = 2)
+    private BigDecimal cgstAmount = BigDecimal.ZERO;
+
+    @Column(name = "sgst_amount", nullable = false, precision = 19, scale = 2)
+    private BigDecimal sgstAmount = BigDecimal.ZERO;
+
+    @Column(name = "igst_amount", nullable = false, precision = 19, scale = 2)
+    private BigDecimal igstAmount = BigDecimal.ZERO;
+
     public Sale getSale() { return sale; }
     public void setSale(Sale sale) { this.sale = sale; }
     public Product getProduct() { return product; }
@@ -42,4 +60,16 @@ public class SaleItem extends AuditableEntity {
     public void setUnitPrice(BigDecimal unitPrice) { this.unitPrice = unitPrice; }
     public BigDecimal getLineTotal() { return lineTotal; }
     public void setLineTotal(BigDecimal lineTotal) { this.lineTotal = lineTotal; }
+    public String getHsnCode() { return hsnCode; }
+    public void setHsnCode(String hsnCode) { this.hsnCode = hsnCode; }
+    public BigDecimal getGstRate() { return gstRate; }
+    public void setGstRate(BigDecimal gstRate) { this.gstRate = gstRate; }
+    public BigDecimal getTaxableAmount() { return taxableAmount; }
+    public void setTaxableAmount(BigDecimal taxableAmount) { this.taxableAmount = taxableAmount; }
+    public BigDecimal getCgstAmount() { return cgstAmount; }
+    public void setCgstAmount(BigDecimal cgstAmount) { this.cgstAmount = cgstAmount; }
+    public BigDecimal getSgstAmount() { return sgstAmount; }
+    public void setSgstAmount(BigDecimal sgstAmount) { this.sgstAmount = sgstAmount; }
+    public BigDecimal getIgstAmount() { return igstAmount; }
+    public void setIgstAmount(BigDecimal igstAmount) { this.igstAmount = igstAmount; }
 }

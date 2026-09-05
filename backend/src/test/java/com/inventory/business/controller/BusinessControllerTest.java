@@ -33,6 +33,40 @@ class BusinessControllerTest extends AuthenticatedControllerTestSupport {
     }
 
     @Test
+    void quickStartCreatesWalkInAndStarterProducts() throws Exception {
+        String created = mockMvc.perform(post("/businesses/quick-start")
+                .header("Authorization", authorizationHeader)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "shopName": "Ram Hardware",
+                      "mobileNumber": "9876500200"
+                    }
+                    """))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.name").value("Ram Hardware"))
+            .andExpect(jsonPath("$.gstEnabled").value(false))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+        String businessId = com.jayway.jsonpath.JsonPath.read(created, "$.id");
+
+        mockMvc.perform(get("/customers")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[*].name", org.hamcrest.Matchers.hasItem("Walk-in")));
+
+        mockMvc.perform(get("/products")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalItems").value(5))
+            .andExpect(jsonPath("$.items[*].barcode", org.hamcrest.Matchers.hasItem("CEM-001")));
+    }
+
+    @Test
     void createsBusiness() throws Exception {
         mockMvc.perform(post("/businesses")
                 .header("Authorization", authorizationHeader)

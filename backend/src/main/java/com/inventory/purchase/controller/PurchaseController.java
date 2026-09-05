@@ -1,5 +1,6 @@
 package com.inventory.purchase.controller;
 
+import com.inventory.common.api.PagedResponse;
 import com.inventory.purchase.dto.PurchaseCancellationRequest;
 import com.inventory.purchase.dto.PurchaseRequest;
 import com.inventory.purchase.dto.PurchaseResponse;
@@ -18,7 +19,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.net.URI;
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -43,8 +43,12 @@ public class PurchaseController {
     }
 
     @GetMapping
-    public List<PurchaseResponse> list(@RequestParam(required = false) String search) {
-        return purchaseService.list(search);
+    public PagedResponse<PurchaseResponse> list(
+        @RequestParam(required = false) String search,
+        @RequestParam(required = false) Integer page,
+        @RequestParam(required = false) Integer size
+    ) {
+        return purchaseService.list(search, page, size);
     }
 
     @GetMapping("/{id}")

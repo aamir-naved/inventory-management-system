@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import com.inventory.auth.mail.LoggingMailService;
 import com.inventory.auth.mail.MailMessage;
+import com.inventory.auth.sms.SmsGateway;
 import com.jayway.jsonpath.JsonPath;
 
 @SpringBootTest
@@ -30,9 +31,20 @@ class AuthControllerTest {
     @Autowired
     private LoggingMailService loggingMailService;
 
+    @Autowired
+    private SmsGateway smsGateway;
+
     @BeforeEach
     void clearMail() {
         loggingMailService.clear();
+        smsGateway.clear();
+    }
+
+    @Test
+    void publicConfigShowsRegistrationOpenInTests() throws Exception {
+        mockMvc.perform(get("/auth/public-config"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.openRegistration").value(true));
     }
 
     @Test
@@ -52,6 +64,22 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.user.email").value("owner@example.com"))
             .andExpect(jsonPath("$.user.emailVerified").value(false))
             .andExpect(jsonPath("$.user.businessId").isEmpty());
+    }
+
+    @Test
+    void registerAllowsComposeUiOrigin() throws Exception {
+        mockMvc.perform(post("/auth/register")
+                .header("Origin", "http://localhost:3001")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "fullName": "Compose Owner",
+                      "email": "compose-owner@example.com",
+                      "password": "password123"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.user.email").value("compose-owner@example.com"));
     }
 
     @Test
@@ -310,6 +338,43 @@ class AuthControllerTest {
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.user.fullName").value("Updated Owner"));
+    }
+
+    @Test
+    void signsInWithPhoneOtp() throws Exception {
+        mockMvc.perform(post("/auth/otp/request")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "phone": "9876500100"
+                    }
+                    """))
+            .andExpect(status().isOk());
+
+        String code = extractOtpFromLatestSms("+919876500100");
+
+        mockMvc.perform(post("/auth/otp/verify")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "phone": "9876500100",
+                      "code": "%s"
+                    }
+                    """.formatted(code)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").isString())
+            .andExpect(jsonPath("$.user.phone").value("+919876500100"))
+            .andExpect(jsonPath("$.user.emailVerified").value(true))
+            .andExpect(jsonPath("$.user.businessId").isEmpty());
+    }
+
+    private String extractOtpFromLatestSms(String phone) {
+        String body = smsGateway.findLatestTo(phone)
+            .orElseThrow(() -> new IllegalStateException("No SMS found for " + phone))
+            .body();
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(\\d{6})").matcher(body);
+        assertThat(matcher.find()).isTrue();
+        return matcher.group(1);
     }
 
     private String extractTokenFromLatestMail(String email, String marker) {

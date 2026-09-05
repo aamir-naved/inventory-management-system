@@ -16,3 +16,5 @@ app:
     access-token-ttl: PT1H
     refresh-token-ttl: P14D
     public-app-url: http://localhost:5173
+  platform:
+    open-registration: true

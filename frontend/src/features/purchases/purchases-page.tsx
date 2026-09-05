@@ -1,5 +1,6 @@
 import {
   useDeferredValue,
+  useEffect,
   useMemo,
   useState,
   type FormEvent,
@@ -7,8 +8,11 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/api/http-client";
+import { EntityPicker } from "@/components/ui/entity-picker";
 import { FieldInfo, FieldLabel } from "@/components/ui/field-label";
+import { PaginationBar } from "@/components/ui/pagination-bar";
 import { useAuth } from "@/features/auth/auth-context";
+import { computeGstLine } from "@/lib/gst";
 import { useBusinessSettings } from "@/features/settings/use-business-settings";
 import {
   parseNumericDraft,
@@ -28,6 +32,7 @@ import {
   createPurchase,
   createPurchaseReturn,
   cancelPurchase,
+  getPurchase,
   listPurchaseReturns,
   listPurchases,
   updatePurchase,
@@ -36,15 +41,18 @@ import {
 } from "@/features/purchases/purchase-api";
 import {
   createSupplier,
+  getSupplier,
   listSuppliers,
   type SupplierPayload,
+  type SupplierRecord,
 } from "@/features/suppliers/supplier-api";
-import { listProducts, type ProductRecord } from "@/features/products/product-api";
+import { getProduct, listProducts, type ProductRecord } from "@/features/products/product-api";
 
 type PurchaseItemDraft = {
   productId: string;
   quantity: NumericDraft;
   purchasePrice: NumericDraft;
+  gstRate: number;
 };
 
 type PurchaseFormState = {
@@ -52,6 +60,7 @@ type PurchaseFormState = {
   purchaseDate: string;
   amountPaid: NumericDraft;
   notes: string;
+  interstate: boolean;
   items: PurchaseItemDraft[];
 };
 
@@ -67,6 +76,7 @@ const initialPurchase: PurchaseFormState = {
   purchaseDate: new Date().toISOString().slice(0, 10),
   amountPaid: "",
   notes: "",
+  interstate: false,
   items: [],
 };
 
@@ -94,15 +104,26 @@ function emptyItem(product?: ProductRecord): PurchaseItemDraft {
     productId: product?.id ?? "",
     quantity: "",
     purchasePrice: product ? Number(product.costPrice) : "",
+    gstRate: product ? Number(product.gstRate ?? 0) : 0,
   };
 }
 
-function summarizeTotal(items: PurchaseItemDraft[]) {
-  return items.reduce(
-    (total, item) =>
-      total + resolveNumericDraft(item.quantity) * resolveNumericDraft(item.purchasePrice),
-    0,
-  );
+function summarizeTotal(
+  items: PurchaseItemDraft[],
+  gstEnabled: boolean,
+  inclusive: boolean,
+  interstate: boolean,
+) {
+  return items.reduce((total, item) => {
+    const line = computeGstLine(
+      resolveNumericDraft(item.quantity),
+      resolveNumericDraft(item.purchasePrice),
+      gstEnabled ? item.gstRate : 0,
+      inclusive,
+      interstate,
+    );
+    return total + line.lineTotal;
+  }, 0);
 }
 
 function toPurchasePayload(form: PurchaseFormState): PurchasePayload {
@@ -111,10 +132,12 @@ function toPurchasePayload(form: PurchaseFormState): PurchasePayload {
     purchaseDate: form.purchaseDate,
     amountPaid: resolveNumericDraft(form.amountPaid),
     notes: form.notes,
+    interstate: form.interstate,
     items: form.items.map((item) => ({
       productId: item.productId,
       quantity: resolveNumericDraft(item.quantity),
       purchasePrice: resolveNumericDraft(item.purchasePrice),
+      gstRate: item.gstRate,
     })),
   };
 }
@@ -123,11 +146,16 @@ export function PurchasesPage() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const businessId = session?.businessId ?? null;
-  const { formatMoney, formatDate } = useBusinessSettings();
+  const { formatMoney, formatDate, gstEnabled, gstInclusivePricing } = useBusinessSettings();
   const [supplierForm, setSupplierForm] = useState<SupplierPayload>(initialSupplier);
   const [purchaseForm, setPurchaseForm] = useState<PurchaseFormState>(initialPurchase);
   const [purchaseSearch, setPurchaseSearch] = useState("");
   const deferredPurchaseSearch = useDeferredValue(purchaseSearch);
+  const [purchasePage, setPurchasePage] = useState(0);
+  const [supplierListSearch, setSupplierListSearch] = useState("");
+  const deferredSupplierListSearch = useDeferredValue(supplierListSearch);
+  const [supplierListPage, setSupplierListPage] = useState(0);
+  const [knownProducts, setKnownProducts] = useState<Record<string, ProductRecord>>({});
   const [selectedPurchase, setSelectedPurchase] = useState<PurchaseRecord | null>(null);
   const [cancellationReason, setCancellationReason] = useState("");
   const [returnForm, setReturnForm] = useState<ReturnFormState>({
@@ -140,21 +168,19 @@ export function PurchasesPage() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  const productsQuery = useQuery({
-    queryKey: ["products", businessId, "", false],
-    queryFn: () => listProducts({ businessId: businessId! }),
-    enabled: Boolean(businessId),
-  });
-
   const suppliersQuery = useQuery({
-    queryKey: ["suppliers", businessId],
-    queryFn: () => listSuppliers(businessId!),
+    queryKey: ["suppliers", businessId, deferredSupplierListSearch, false, supplierListPage],
+    queryFn: () =>
+      listSuppliers(businessId!, {
+        search: deferredSupplierListSearch,
+        page: supplierListPage,
+      }),
     enabled: Boolean(businessId),
   });
 
   const purchasesQuery = useQuery({
-    queryKey: ["purchases", businessId, deferredPurchaseSearch],
-    queryFn: () => listPurchases(businessId!, deferredPurchaseSearch),
+    queryKey: ["purchases", businessId, deferredPurchaseSearch, purchasePage],
+    queryFn: () => listPurchases(businessId!, deferredPurchaseSearch, { page: purchasePage }),
     enabled: Boolean(businessId),
   });
 
@@ -169,6 +195,14 @@ export function PurchasesPage() {
     queryFn: () => listPurchasePayments(businessId!, selectedPurchase!.id),
     enabled: Boolean(businessId && selectedPurchase?.id),
   });
+
+  useEffect(() => {
+    setPurchasePage(0);
+  }, [deferredPurchaseSearch]);
+
+  useEffect(() => {
+    setSupplierListPage(0);
+  }, [deferredSupplierListSearch]);
 
   const supplierMutation = useMutation({
     mutationFn: async (payload: SupplierPayload) => {
@@ -260,11 +294,9 @@ export function PurchasesPage() {
         queryClient.invalidateQueries({ queryKey: ["purchase-payments", businessId] }),
       ]);
 
-      const purchases = await queryClient.fetchQuery({
-        queryKey: ["purchases", businessId, deferredPurchaseSearch],
-        queryFn: () => listPurchases(businessId!, deferredPurchaseSearch),
-      });
-      const refreshed = purchases.find((purchase) => purchase.id === selectedPurchase?.id);
+      const refreshed = selectedPurchase
+        ? await getPurchase(businessId!, selectedPurchase.id)
+        : null;
       if (refreshed) {
         setSelectedPurchase(refreshed);
       }
@@ -333,14 +365,8 @@ export function PurchasesPage() {
         queryClient.invalidateQueries({ queryKey: ["products", businessId] }),
       ]);
 
-      const purchases = await queryClient.fetchQuery({
-        queryKey: ["purchases", businessId, deferredPurchaseSearch],
-        queryFn: () => listPurchases(businessId!, deferredPurchaseSearch),
-      });
-      const refreshed = purchases.find((purchase) => purchase.id === purchaseReturn.purchaseId);
-      if (refreshed) {
-        selectPurchase(refreshed);
-      }
+      const refreshed = await getPurchase(businessId!, purchaseReturn.purchaseId);
+      selectPurchase(refreshed);
     },
     onError: (error) => {
       if (error instanceof Error && !(error instanceof ApiError)) {
@@ -366,7 +392,16 @@ export function PurchasesPage() {
     setFeedback("Request failed.");
   }
 
-  const purchaseTotal = useMemo(() => summarizeTotal(purchaseForm.items), [purchaseForm.items]);
+  const purchaseTotal = useMemo(
+    () =>
+      summarizeTotal(
+        purchaseForm.items,
+        gstEnabled,
+        gstInclusivePricing,
+        purchaseForm.interstate,
+      ),
+    [purchaseForm.items, purchaseForm.interstate, gstEnabled, gstInclusivePricing],
+  );
   const amountPaidNow = resolveNumericDraft(purchaseForm.amountPaid);
   const outstandingAfterSave = Math.max(purchaseTotal - amountPaidNow, 0);
 
@@ -430,10 +465,9 @@ export function PurchasesPage() {
   }
 
   function addItem() {
-    const firstProduct = productsQuery.data?.[0];
     setPurchaseForm((current) => ({
       ...current,
-      items: [...current.items, emptyItem(firstProduct)],
+      items: [...current.items, emptyItem()],
     }));
   }
 
@@ -489,7 +523,7 @@ export function PurchasesPage() {
       <section className="empty-state">
         <span className="brand-kicker">Business required</span>
         <h1>Finish business setup before recording purchases.</h1>
-        <p>Purchases are tenant-scoped and need the business profile first.</p>
+        <p>Set up your business first so purchases belong to the right shop.</p>
       </section>
     );
   }
@@ -572,8 +606,18 @@ export function PurchasesPage() {
             </button>
           </form>
 
+          <div className="field">
+            <label htmlFor="purchase-supplier-search">Search suppliers</label>
+            <input
+              id="purchase-supplier-search"
+              value={supplierListSearch}
+              onChange={(event) => setSupplierListSearch(event.target.value)}
+              placeholder="Search suppliers"
+            />
+          </div>
+
           <div className="supplier-list">
-            {suppliersQuery.data?.map((supplier) => (
+            {suppliersQuery.data?.items.map((supplier) => (
               <button
                 key={supplier.id}
                 type="button"
@@ -589,6 +633,7 @@ export function PurchasesPage() {
               </button>
             ))}
           </div>
+          <PaginationBar page={suppliersQuery.data} onPageChange={setSupplierListPage} />
         </article>
 
         <article className="panel">
@@ -610,20 +655,20 @@ export function PurchasesPage() {
                   label="Supplier"
                   info="Who you bought from. Create a supplier on the left if they are not listed yet."
                 />
-                <select
+                <EntityPicker
                   id="purchase-supplier"
                   value={purchaseForm.supplierId}
-                  onChange={(event) =>
-                    setPurchaseForm((current) => ({ ...current, supplierId: event.target.value }))
+                  enabled={Boolean(businessId)}
+                  placeholder="Search suppliers"
+                  queryKey={["suppliers", businessId]}
+                  fetchPage={(search) => listSuppliers(businessId!, { search })}
+                  fetchById={(id) => getSupplier(businessId!, id)}
+                  getId={(supplier: SupplierRecord) => supplier.id}
+                  getLabel={(supplier: SupplierRecord) => supplier.name}
+                  onChange={(supplierId) =>
+                    setPurchaseForm((current) => ({ ...current, supplierId }))
                   }
-                >
-                  <option value="">Select supplier</option>
-                  {suppliersQuery.data?.map((supplier) => (
-                    <option key={supplier.id} value={supplier.id}>
-                      {supplier.name}
-                    </option>
-                  ))}
-                </select>
+                />
                 {fieldErrors.supplierId ? <span className="field-error">{fieldErrors.supplierId}</span> : null}
               </div>
 
@@ -643,6 +688,22 @@ export function PurchasesPage() {
                 />
               </div>
             </div>
+
+            {gstEnabled ? (
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={purchaseForm.interstate}
+                  onChange={(event) =>
+                    setPurchaseForm((current) => ({
+                      ...current,
+                      interstate: event.target.checked,
+                    }))
+                  }
+                />
+                <span>Interstate purchase (IGST)</span>
+              </label>
+            ) : null}
 
             <div className="split-grid">
               <div className="field">
@@ -713,7 +774,7 @@ export function PurchasesPage() {
               ) : null}
 
               {purchaseForm.items.map((item, index) => {
-                const product = productsQuery.data?.find((candidate) => candidate.id === item.productId);
+                const product = knownProducts[item.productId];
                 const lineTotal =
                   resolveNumericDraft(item.quantity) * resolveNumericDraft(item.purchasePrice);
 
@@ -726,29 +787,37 @@ export function PurchasesPage() {
                           label="Product"
                           info="The catalog product receiving this stock. Stock will increase for this product."
                         />
-                        <select
+                        <EntityPicker
                           id={`purchase-item-product-${index}`}
                           value={item.productId}
-                          onChange={(event) => {
-                            const selected = productsQuery.data?.find(
-                              (candidate) => candidate.id === event.target.value,
-                            );
+                          enabled={Boolean(businessId)}
+                          placeholder="Search products"
+                          queryKey={["products", businessId]}
+                          fetchPage={(search) => listProducts({ businessId: businessId!, search })}
+                          fetchById={(id) => getProduct(businessId!, id)}
+                          getId={(productOption: ProductRecord) => productOption.id}
+                          getLabel={(productOption: ProductRecord) =>
+                            productOption.sku
+                              ? `${productOption.name} (${productOption.sku})`
+                              : productOption.name
+                          }
+                          onChange={(productId, selected) => {
+                            if (selected) {
+                              setKnownProducts((current) => ({
+                                ...current,
+                                [selected.id]: selected,
+                              }));
+                            }
                             updateItem(index, {
                               ...item,
-                              productId: event.target.value,
+                              productId,
                               purchasePrice: selected
                                 ? Number(selected.costPrice)
                                 : item.purchasePrice,
+                              gstRate: selected ? Number(selected.gstRate ?? 0) : item.gstRate,
                             });
                           }}
-                        >
-                          <option value="">Select product</option>
-                          {productsQuery.data?.map((productOption: ProductRecord) => (
-                            <option key={productOption.id} value={productOption.id}>
-                              {productOption.name}
-                            </option>
-                          ))}
-                        </select>
+                        />
                       </div>
 
                       <div className="field">
@@ -864,7 +933,7 @@ export function PurchasesPage() {
           </div>
 
           <div className="product-list">
-            {purchasesQuery.data?.map((purchase) => (
+            {purchasesQuery.data?.items.map((purchase) => (
               <article
                 key={purchase.id}
                 className={`product-card${selectedPurchase?.id === purchase.id ? " product-card--selected" : ""}`}
@@ -904,6 +973,7 @@ export function PurchasesPage() {
               </article>
             ))}
           </div>
+          <PaginationBar page={purchasesQuery.data} onPageChange={setPurchasePage} />
         </article>
 
         {selectedPurchase ? (

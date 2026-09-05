@@ -8,6 +8,7 @@ import com.inventory.purchase.entity.Purchase;
 import com.inventory.purchase.repository.PurchaseRepository;
 import com.inventory.purchase.repository.PurchaseReturnRepository;
 import com.inventory.report.dto.CustomerOutstandingReportResponse;
+import com.inventory.report.dto.GstReportResponse;
 import com.inventory.report.dto.InventoryReportResponse;
 import com.inventory.report.dto.PurchaseReportResponse;
 import com.inventory.report.dto.SalesReportResponse;
@@ -15,6 +16,7 @@ import com.inventory.report.dto.SupplierOutstandingReportResponse;
 import com.inventory.sales.entity.Sale;
 import com.inventory.sales.repository.SaleRepository;
 import com.inventory.sales.repository.SaleReturnRepository;
+import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,7 +56,7 @@ public class ReportService {
 
     public InventoryReportResponse inventoryReport(boolean lowStockOnly) {
         requireBusinessId();
-        List<InventoryStockResponse> stock = inventoryService.listStock("", lowStockOnly, false);
+        List<InventoryStockResponse> stock = inventoryService.listStockAll("", lowStockOnly, false);
 
         List<InventoryReportResponse.Row> rows = stock.stream()
             .map(item -> new InventoryReportResponse.Row(
@@ -279,6 +281,71 @@ public class ReportService {
             OffsetDateTime.now(),
             rows.size(),
             totalOutstanding,
+            rows
+        );
+    }
+
+    public GstReportResponse gstReport(LocalDate from, LocalDate to) {
+        UUID businessId = requireBusinessId();
+        validateDateRange(from, to);
+        List<GstReportResponse.Row> rows = new ArrayList<>();
+        BigDecimal taxable = BigDecimal.ZERO;
+        BigDecimal cgst = BigDecimal.ZERO;
+        BigDecimal sgst = BigDecimal.ZERO;
+        BigDecimal igst = BigDecimal.ZERO;
+
+        for (Sale sale : saleRepository.findForReport(businessId, from, to)) {
+            Hibernate.initialize(sale.getItems());
+            for (com.inventory.sales.entity.SaleItem item : sale.getItems()) {
+                rows.add(new GstReportResponse.Row(
+                    "SALE",
+                    sale.getSaleNumber(),
+                    sale.getSaleDate(),
+                    sale.getCustomer().getName(),
+                    sale.isInterstate(),
+                    nullSafe(item.getGstRate()),
+                    nullSafe(item.getTaxableAmount()),
+                    nullSafe(item.getCgstAmount()),
+                    nullSafe(item.getSgstAmount()),
+                    nullSafe(item.getIgstAmount())
+                ));
+                taxable = taxable.add(nullSafe(item.getTaxableAmount()));
+                cgst = cgst.add(nullSafe(item.getCgstAmount()));
+                sgst = sgst.add(nullSafe(item.getSgstAmount()));
+                igst = igst.add(nullSafe(item.getIgstAmount()));
+            }
+        }
+        for (Purchase purchase : purchaseRepository.findForReport(businessId, from, to)) {
+            Hibernate.initialize(purchase.getItems());
+            for (com.inventory.purchase.entity.PurchaseItem item : purchase.getItems()) {
+                rows.add(new GstReportResponse.Row(
+                    "PURCHASE",
+                    purchase.getPurchaseNumber(),
+                    purchase.getPurchaseDate(),
+                    purchase.getSupplier().getName(),
+                    purchase.isInterstate(),
+                    nullSafe(item.getGstRate()),
+                    nullSafe(item.getTaxableAmount()),
+                    nullSafe(item.getCgstAmount()),
+                    nullSafe(item.getSgstAmount()),
+                    nullSafe(item.getIgstAmount())
+                ));
+                taxable = taxable.add(nullSafe(item.getTaxableAmount()));
+                cgst = cgst.add(nullSafe(item.getCgstAmount()));
+                sgst = sgst.add(nullSafe(item.getSgstAmount()));
+                igst = igst.add(nullSafe(item.getIgstAmount()));
+            }
+        }
+
+        return new GstReportResponse(
+            OffsetDateTime.now(),
+            from,
+            to,
+            taxable,
+            cgst,
+            sgst,
+            igst,
+            cgst.add(sgst).add(igst),
             rows
         );
     }
