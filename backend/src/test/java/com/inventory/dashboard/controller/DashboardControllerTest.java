@@ -68,7 +68,8 @@ class DashboardControllerTest extends AuthenticatedControllerTestSupport {
         createPurchase(supplierId, cementId, today, "0", 10);
 
         // Stock after flows: cement 100 -5 -5 -2 +2(cancel restore) +10 = 100
-        // Inventory value: screws 10*320 + cement 100*320 = 35200
+        // Before purchase cement on hand is 90 @ 320; buy 10 @ 315 → WAC 319.50
+        // Inventory value: screws 10*320 + cement 100*319.50 = 35150
         mockMvc.perform(get("/dashboard/metrics")
                 .header("Authorization", authorizationHeader)
                 .header("X-Business-Id", businessId))
@@ -78,7 +79,7 @@ class DashboardControllerTest extends AuthenticatedControllerTestSupport {
             .andExpect(jsonPath("$.todaysPurchasesAmount").value(3150.0))
             .andExpect(jsonPath("$.totalRevenue").value(3600.0))
             .andExpect(jsonPath("$.totalProducts").value(2))
-            .andExpect(jsonPath("$.inventoryValue").value(35200.0))
+            .andExpect(jsonPath("$.inventoryValue").value(35150.0))
             .andExpect(jsonPath("$.lowStockProducts").value(1))
             .andExpect(jsonPath("$.outstandingCustomers").value(1300.0))
             .andExpect(jsonPath("$.outstandingSuppliers").value(3150.0));
