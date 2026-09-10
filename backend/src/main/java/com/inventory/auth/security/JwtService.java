@@ -32,13 +32,14 @@ public class JwtService {
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    public JwtToken issueToken(UUID userId, String email) {
+    public JwtToken issueToken(UUID userId, String email, int tokenVersion) {
         OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
         OffsetDateTime expiresAt = now.plus(authProperties.getAccessTokenTtl());
 
         String token = Jwts.builder()
             .subject(userId.toString())
             .claim("email", email == null ? "" : email)
+            .claim("tv", tokenVersion)
             .issuedAt(Date.from(now.toInstant()))
             .expiration(Date.from(expiresAt.toInstant()))
             .signWith(secretKey)
@@ -55,10 +56,12 @@ public class JwtService {
                 .parseSignedClaims(token)
                 .getPayload();
 
+            Integer tokenVersion = claims.get("tv", Integer.class);
             return new AuthenticatedUser(
                 UUID.fromString(claims.getSubject()),
                 claims.get("email", String.class),
-                false
+                false,
+                tokenVersion == null ? 0 : tokenVersion
             );
         } catch (JwtException | IllegalArgumentException exception) {
             throw new IllegalArgumentException("Invalid or expired access token");

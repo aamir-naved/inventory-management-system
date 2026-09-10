@@ -1,6 +1,7 @@
 package com.inventory.sales.controller;
 
 import com.inventory.common.api.PagedResponse;
+import com.inventory.common.idempotency.IdempotencyService;
 import com.inventory.sales.dto.*;
 import com.inventory.sales.service.SaleService;
 import jakarta.validation.Valid;
@@ -8,23 +9,36 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
-import java.net.URI;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/sales")
 public class SaleController {
     private final SaleService saleService;
+    private final IdempotencyService idempotencyService;
 
-    public SaleController(SaleService saleService) {
+    public SaleController(SaleService saleService, IdempotencyService idempotencyService) {
         this.saleService = saleService;
+        this.idempotencyService = idempotencyService;
     }
 
     @PostMapping
-    public ResponseEntity<SaleResponse> create(@Valid @RequestBody SaleRequest request) {
-        SaleResponse response = saleService.create(request);
-        URI location = ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(response.id()).toUri();
-        return ResponseEntity.created(location).body(response);
+    public ResponseEntity<SaleResponse> create(
+        @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+        @Valid @RequestBody SaleRequest request
+    ) {
+        return idempotencyService.execute(
+            idempotencyKey,
+            "POST",
+            "/sales",
+            request,
+            SaleResponse.class,
+            () -> saleService.create(request),
+            response -> ServletUriComponentsBuilder.fromCurrentRequest()
+                .path("/{id}")
+                .buildAndExpand(response.id())
+                .toUri()
+        );
     }
 
     @GetMapping

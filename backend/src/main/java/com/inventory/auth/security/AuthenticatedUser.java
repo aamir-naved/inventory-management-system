@@ -5,6 +5,7 @@ import java.util.UUID;
 public record AuthenticatedUser(
     UUID userId,
     String email,
-    boolean platformAdmin
+    boolean platformAdmin,
+    int tokenVersion
 ) {
 }

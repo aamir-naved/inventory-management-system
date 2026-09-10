@@ -27,10 +27,9 @@ public class LoggingMailService implements MailService {
         }
 
         log.info(
-            "Mail not configured; logging outbound message. to={} subject={} body={}",
+            "Mail not configured; outbound message captured in memory only. to={} subject={}",
             message.to(),
-            message.subject(),
-            message.body()
+            message.subject()
         );
     }
 

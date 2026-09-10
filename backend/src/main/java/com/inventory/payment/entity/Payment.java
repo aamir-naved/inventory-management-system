@@ -17,6 +17,8 @@ public class Payment extends TenantAwareEntity {
     public static final String PARTY_SUPPLIER = "SUPPLIER";
     public static final String DOCUMENT_SALE = "SALE";
     public static final String DOCUMENT_PURCHASE = "PURCHASE";
+    public static final String KIND_RECEIPT = "RECEIPT";
+    public static final String KIND_REFUND = "REFUND";
 
     @Column(name = "party_type", nullable = false, length = 30)
     private String partyType;
@@ -35,6 +37,9 @@ public class Payment extends TenantAwareEntity {
 
     @Column(name = "amount", nullable = false, precision = 19, scale = 2)
     private BigDecimal amount;
+
+    @Column(name = "payment_kind", nullable = false, length = 20)
+    private String paymentKind = KIND_RECEIPT;
 
     @Column(name = "notes", length = 255)
     private String notes;
@@ -85,6 +90,14 @@ public class Payment extends TenantAwareEntity {
 
     public void setAmount(BigDecimal amount) {
         this.amount = amount;
+    }
+
+    public String getPaymentKind() {
+        return paymentKind;
+    }
+
+    public void setPaymentKind(String paymentKind) {
+        this.paymentKind = paymentKind;
     }
 
     public String getNotes() {

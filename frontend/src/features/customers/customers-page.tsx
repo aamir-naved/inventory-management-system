@@ -28,6 +28,7 @@ const initialForm: CustomerPayload = {
   contactPerson: "",
   mobileNumber: "",
   addressLine: "",
+  stateCode: "",
 };
 
 function toPayload(customer: CustomerRecord): CustomerPayload {
@@ -36,6 +37,7 @@ function toPayload(customer: CustomerRecord): CustomerPayload {
     contactPerson: customer.contactPerson ?? "",
     mobileNumber: customer.mobileNumber ?? "",
     addressLine: customer.addressLine ?? "",
+    stateCode: customer.stateCode ?? "",
   };
 }
 
@@ -268,6 +270,18 @@ export function CustomersPage() {
                 onChange={(event) => updateField("addressLine", event.target.value)}
                 placeholder="Ring Road"
               />
+            </div>
+
+            <div className="field">
+              <label htmlFor="customer-state-code">State code</label>
+              <input
+                id="customer-state-code"
+                value={form.stateCode}
+                maxLength={2}
+                onChange={(event) => updateField("stateCode", event.target.value.toUpperCase())}
+                placeholder="29"
+              />
+              <p className="inline-note">GST state code — used to choose CGST/SGST vs IGST.</p>
             </div>
 
             {feedback ? <p className="inline-note">{feedback}</p> : null}

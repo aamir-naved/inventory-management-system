@@ -12,7 +12,6 @@ export function PlatformAddShopPage() {
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [provisionStarterCatalog, setProvisionStarterCatalog] = useState(true);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [createdPassword, setCreatedPassword] = useState<string | null>(null);
   const [createdShopId, setCreatedShopId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -20,7 +19,6 @@ export function PlatformAddShopPage() {
     event.preventDefault();
     setIsSubmitting(true);
     setFeedback(null);
-    setCreatedPassword(null);
     try {
       const result = await createPlatformShop({
         shopName,
@@ -30,9 +28,8 @@ export function PlatformAddShopPage() {
         temporaryPassword: temporaryPassword.trim() || undefined,
         provisionStarterCatalog,
       });
-      setCreatedPassword(result.temporaryPassword);
       setCreatedShopId(result.shop.id);
-      setFeedback(`Created ${result.shop.name}. Copy the temporary password below.`);
+      setFeedback(result.message);
     } catch (error) {
       setFeedback(error instanceof ApiError ? error.message : "Unable to create the shop.");
     } finally {
@@ -106,12 +103,7 @@ export function PlatformAddShopPage() {
             />
             <span>Add Walk-in customer and starter hardware items</span>
           </label>
-          {feedback ? <p className={createdPassword ? "form-success" : "form-error"}>{feedback}</p> : null}
-          {createdPassword ? (
-            <p className="inline-note">
-              Temporary password: <strong>{createdPassword}</strong>
-            </p>
-          ) : null}
+          {feedback ? <p className={createdShopId ? "form-success" : "form-error"}>{feedback}</p> : null}
           {createdShopId ? (
             <Link to={`/platform/shops/${createdShopId}`} className="text-link">
               Open shop

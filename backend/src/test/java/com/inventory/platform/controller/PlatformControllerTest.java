@@ -1,5 +1,6 @@
 package com.inventory.platform.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -16,6 +17,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.inventory.auth.entity.UserAccount;
+import com.inventory.auth.mail.LoggingMailService;
 import com.inventory.business.entity.Business;
 import com.inventory.support.AuthenticatedControllerTestSupport;
 import com.jayway.jsonpath.JsonPath;
@@ -26,6 +28,9 @@ class PlatformControllerTest extends AuthenticatedControllerTestSupport {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private LoggingMailService loggingMailService;
 
     private String adminAuth;
     private UserAccount shopOwner;
@@ -95,6 +100,8 @@ class PlatformControllerTest extends AuthenticatedControllerTestSupport {
     @Test
     void addShopProvisionsWalkInAndStarterCatalog() throws Exception {
         String unique = String.valueOf(System.nanoTime());
+        String ownerEmail = "owner-%s@khanstore.com".formatted(unique);
+        loggingMailService.clear();
         String created = mockMvc.perform(post("/platform/shops")
                 .header("Authorization", adminAuth)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -102,20 +109,31 @@ class PlatformControllerTest extends AuthenticatedControllerTestSupport {
                     {
                       "shopName": "Khan General Store",
                       "ownerName": "Aamir Khan",
-                      "email": "owner-%s@khanstore.com",
+                      "email": "%s",
                       "phone": "9%s",
                       "provisionStarterCatalog": true
                     }
-                    """.formatted(unique, unique.substring(unique.length() - 9))))
+                    """.formatted(ownerEmail, unique.substring(unique.length() - 9))))
             .andExpect(status().isCreated())
-            .andExpect(jsonPath("$.temporaryPassword").isString())
+            .andExpect(jsonPath("$.temporaryPassword").doesNotExist())
+            .andExpect(jsonPath("$.passwordDelivery").value("EMAIL"))
             .andExpect(jsonPath("$.shop.name").value("Khan General Store"))
             .andReturn()
             .getResponse()
             .getContentAsString();
 
         String shopId = JsonPath.read(created, "$.shop.id");
-        String ownerEmail = JsonPath.read(created, "$.shop.ownerEmail");
+        String mailBody = loggingMailService.findLatestTo(ownerEmail)
+            .orElseThrow()
+            .body();
+        assertThat(mailBody).contains("Temporary password:");
+        String temporaryPassword = mailBody.lines()
+            .filter(line -> line.startsWith("Temporary password:"))
+            .map(line -> line.substring("Temporary password:".length()).trim())
+            .findFirst()
+            .orElseThrow();
+        assertThat(temporaryPassword).isNotBlank();
+
         UserAccount owner = userAccountRepository.findByEmailIgnoreCase(ownerEmail).orElseThrow();
         String ownerAuth = authorizationHeader(owner);
 

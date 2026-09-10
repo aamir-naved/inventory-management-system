@@ -19,6 +19,9 @@ public record CustomerRequest(
     String mobileNumber,
 
     @Size(max = 255, message = "Address must be 255 characters or fewer")
-    String addressLine
+    String addressLine,
+
+    @Size(max = 2, message = "State code must be 2 characters")
+    String stateCode
 ) {
 }

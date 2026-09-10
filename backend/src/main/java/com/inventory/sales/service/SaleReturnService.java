@@ -1,10 +1,13 @@
 package com.inventory.sales.service;
 
 import com.inventory.common.tenant.TenantContext;
+import com.inventory.document.numbering.DocumentNumberService;
+import com.inventory.document.numbering.DocumentType;
 import com.inventory.inventory.entity.InventoryMovement;
 import com.inventory.inventory.repository.InventoryMovementRepository;
 import com.inventory.payment.service.PaymentService;
 import com.inventory.product.entity.Product;
+import com.inventory.product.repository.ProductRepository;
 import com.inventory.sales.dto.SaleReturnItemRequest;
 import com.inventory.sales.dto.SaleReturnItemResponse;
 import com.inventory.sales.dto.SaleReturnRequest;
@@ -15,13 +18,14 @@ import com.inventory.sales.entity.SaleReturn;
 import com.inventory.sales.entity.SaleReturnItem;
 import com.inventory.sales.repository.SaleRepository;
 import com.inventory.sales.repository.SaleReturnRepository;
+import com.inventory.tax.GstCalculator;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -35,24 +39,30 @@ public class SaleReturnService {
 
     private final SaleReturnRepository saleReturnRepository;
     private final SaleRepository saleRepository;
+    private final ProductRepository productRepository;
     private final InventoryMovementRepository inventoryMovementRepository;
     private final PaymentService paymentService;
+    private final DocumentNumberService documentNumberService;
 
     public SaleReturnService(
         SaleReturnRepository saleReturnRepository,
         SaleRepository saleRepository,
+        ProductRepository productRepository,
         InventoryMovementRepository inventoryMovementRepository,
-        PaymentService paymentService
+        PaymentService paymentService,
+        DocumentNumberService documentNumberService
     ) {
         this.saleReturnRepository = saleReturnRepository;
         this.saleRepository = saleRepository;
+        this.productRepository = productRepository;
         this.inventoryMovementRepository = inventoryMovementRepository;
         this.paymentService = paymentService;
+        this.documentNumberService = documentNumberService;
     }
 
     public SaleReturnResponse create(UUID saleId, SaleReturnRequest request) {
         UUID businessId = requireBusinessId();
-        Sale sale = findSale(saleId, businessId);
+        Sale sale = findSaleForUpdate(saleId, businessId);
 
         if (sale.isCancelled()) {
             throw new IllegalArgumentException("Cancelled sales cannot accept returns");
@@ -66,11 +76,12 @@ public class SaleReturnService {
         Set<UUID> requestedSaleItemIds = new HashSet<>();
         List<SaleReturnItem> returnItems = new ArrayList<>();
         BigDecimal totalAmount = BigDecimal.ZERO;
+        Map<UUID, BigDecimal> restoreByProduct = new HashMap<>();
 
         SaleReturn saleReturn = new SaleReturn();
         saleReturn.setBusinessId(businessId);
         saleReturn.setSale(sale);
-        saleReturn.setReturnNumber(generateReturnNumber());
+        saleReturn.setReturnNumber(documentNumberService.next(businessId, DocumentType.SALE_RETURN));
         saleReturn.setReturnDate(request.returnDate());
         saleReturn.setReason(normalize(request.reason()));
         saleReturn.setNotes(normalize(request.notes()));
@@ -96,24 +107,39 @@ public class SaleReturnService {
                 );
             }
 
-            BigDecimal lineTotal = itemRequest.quantity().multiply(saleItem.getUnitPrice());
+            BigDecimal alreadyCredited = saleReturnRepository.sumReturnedAmountForSaleItem(
+                businessId,
+                saleItem.getId()
+            );
+            BigDecimal lineTotal = GstCalculator.proportionalLineCredit(
+                saleItem.getLineTotal(),
+                saleItem.getQuantity(),
+                itemRequest.quantity(),
+                alreadyReturned,
+                alreadyCredited
+            );
             SaleReturnItem returnItem = new SaleReturnItem();
             returnItem.setSaleReturn(saleReturn);
             returnItem.setSaleItem(saleItem);
             returnItem.setProduct(saleItem.getProduct());
+            returnItem.setProductName(saleItem.getProductName());
+            returnItem.setUnit(saleItem.getUnit());
             returnItem.setQuantity(itemRequest.quantity());
             returnItem.setUnitPrice(saleItem.getUnitPrice());
             returnItem.setLineTotal(lineTotal);
             returnItems.add(returnItem);
             totalAmount = totalAmount.add(lineTotal);
+            restoreByProduct.merge(saleItem.getProduct().getId(), itemRequest.quantity(), BigDecimal::add);
         }
+
+        Map<UUID, Product> lockedProducts = lockProductsForUpdate(businessId, restoreByProduct.keySet());
 
         saleReturn.setItems(returnItems);
         saleReturn.setTotalAmount(totalAmount);
         SaleReturn savedReturn = saleReturnRepository.save(saleReturn);
 
         for (SaleReturnItem returnItem : savedReturn.getItems()) {
-            Product product = returnItem.getProduct();
+            Product product = lockedProducts.get(returnItem.getProduct().getId());
             BigDecimal before = product.getCurrentStock();
             BigDecimal after = before.add(returnItem.getQuantity());
             product.setCurrentStock(after);
@@ -161,6 +187,27 @@ public class SaleReturnService {
             .orElseThrow(() -> new EntityNotFoundException("Sale not found"));
     }
 
+    private Sale findSaleForUpdate(UUID saleId, UUID businessId) {
+        return saleRepository.findByIdAndBusinessIdForUpdate(saleId, businessId)
+            .orElseThrow(() -> new EntityNotFoundException("Sale not found"));
+    }
+
+    private Map<UUID, Product> lockProductsForUpdate(UUID businessId, Iterable<UUID> productIds) {
+        List<UUID> orderedIds = new ArrayList<>();
+        for (UUID productId : productIds) {
+            orderedIds.add(productId);
+        }
+        orderedIds.sort(Comparator.naturalOrder());
+
+        Map<UUID, Product> locked = new HashMap<>();
+        for (UUID productId : orderedIds) {
+            Product product = productRepository.findByIdAndBusinessIdForUpdate(productId, businessId)
+                .orElseThrow(() -> new EntityNotFoundException("Product not found"));
+            locked.put(productId, product);
+        }
+        return locked;
+    }
+
     private SaleReturn findReturn(UUID returnId) {
         return saleReturnRepository.findByIdAndBusinessId(returnId, requireBusinessId())
             .orElseThrow(() -> new EntityNotFoundException("Sale return not found"));
@@ -188,10 +235,6 @@ public class SaleReturnService {
     private UUID requireBusinessId() {
         return TenantContext.getBusinessId()
             .orElseThrow(() -> new IllegalArgumentException("X-Business-Id header is required"));
-    }
-
-    private String generateReturnNumber() {
-        return "RET-" + LocalDate.now() + "-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
     }
 
     private String normalize(String value) {
@@ -224,8 +267,8 @@ public class SaleReturnService {
                 item.getId(),
                 item.getSaleItem().getId(),
                 item.getProduct().getId(),
-                item.getProduct().getName(),
-                item.getProduct().getUnit(),
+                item.getProductName(),
+                item.getUnit(),
                 item.getQuantity(),
                 item.getUnitPrice(),
                 item.getLineTotal()

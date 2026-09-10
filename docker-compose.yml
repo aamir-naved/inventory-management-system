@@ -17,6 +17,7 @@ services:
       retries: 10
 
   backend:
+    image: ims-backend:${IMAGE_TAG:-local}
     restart: unless-stopped
     build:
       context: ./backend
@@ -35,10 +36,12 @@ services:
       # the Spring `dev` profile supplies a development secret; `prod` refuses to start without a real one.
       APP_PUBLIC_APP_URL: ${APP_PUBLIC_APP_URL:-http://localhost:3000}
       APP_MAIL_FROM: ${APP_MAIL_FROM:-noreply@inventory.local}
+      APP_OPEN_REGISTRATION: ${APP_OPEN_REGISTRATION:-true}
     ports:
       - "${BACKEND_PORT:-8080}:8080"
 
   frontend:
+    image: ims-frontend:${IMAGE_TAG:-local}
     restart: unless-stopped
     build:
       context: ./frontend

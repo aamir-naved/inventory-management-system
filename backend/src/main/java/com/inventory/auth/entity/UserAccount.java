@@ -30,6 +30,9 @@ public class UserAccount extends AuditableEntity {
     @Column(name = "platform_role", length = 30)
     private String platformRole;
 
+    @Column(name = "token_version", nullable = false)
+    private int tokenVersion;
+
     public String getFullName() {
         return fullName;
     }
@@ -84,6 +87,18 @@ public class UserAccount extends AuditableEntity {
 
     public void setPlatformRole(String platformRole) {
         this.platformRole = platformRole;
+    }
+
+    public int getTokenVersion() {
+        return tokenVersion;
+    }
+
+    public void setTokenVersion(int tokenVersion) {
+        this.tokenVersion = tokenVersion;
+    }
+
+    public void bumpTokenVersion() {
+        this.tokenVersion++;
     }
 
     public boolean isPlatformAdmin() {

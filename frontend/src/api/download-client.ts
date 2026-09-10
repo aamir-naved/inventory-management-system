@@ -1,10 +1,7 @@
 import { appConfig } from "@/app/config";
+import { expireAuthSession, refreshSessionOnce } from "@/api/auth-session";
 import { ApiError } from "@/api/http-client";
-import {
-  clearStoredAuthSession,
-  readStoredAuthSession,
-  writeStoredAuthSession,
-} from "@/features/auth/auth-storage";
+import { readStoredAuthSession } from "@/features/auth/auth-storage";
 
 type DownloadOptions = {
   businessId?: string | null;
@@ -31,55 +28,6 @@ function filenameFromDisposition(header: string | null, fallback: string) {
   return fallback;
 }
 
-async function tryRefreshSession(): Promise<boolean> {
-  const session = readStoredAuthSession();
-  if (!session?.refreshToken) {
-    return false;
-  }
-
-  try {
-    const response = await fetch(`${appConfig.apiBaseUrl}/auth/refresh`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ refreshToken: session.refreshToken }),
-    });
-
-    if (!response.ok) {
-      clearStoredAuthSession();
-      return false;
-    }
-
-    const authPayload = (await response.json()) as {
-      accessToken: string;
-      tokenType: string;
-      expiresAt: string;
-      refreshToken?: string | null;
-      refreshExpiresAt?: string | null;
-      user: typeof session.user;
-    };
-
-    writeStoredAuthSession({
-      accessToken: authPayload.accessToken,
-      tokenType: authPayload.tokenType,
-      expiresAt: authPayload.expiresAt,
-      refreshToken: authPayload.refreshToken ?? null,
-      refreshExpiresAt: authPayload.refreshExpiresAt ?? null,
-      user: {
-        ...authPayload.user,
-        emailVerified: Boolean(authPayload.user.emailVerified),
-        role: authPayload.user.role ?? session.user.role ?? "OWNER",
-      },
-    });
-
-    return true;
-  } catch {
-    clearStoredAuthSession();
-    return false;
-  }
-}
-
 export async function downloadBlob(
   path: string,
   {
@@ -103,7 +51,7 @@ export async function downloadBlob(
   });
 
   if (response.status === 401 && !skipAuthRefresh) {
-    const refreshed = await tryRefreshSession();
+    const refreshed = await refreshSessionOnce();
     if (refreshed) {
       return downloadBlob(
         path,
@@ -111,6 +59,7 @@ export async function downloadBlob(
         fallbackFilename,
       );
     }
+    expireAuthSession();
   }
 
   if (!response.ok) {

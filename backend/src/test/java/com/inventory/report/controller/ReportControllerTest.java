@@ -18,6 +18,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -154,6 +155,107 @@ class ReportControllerTest extends AuthenticatedControllerTestSupport {
             .andExpect(jsonPath("$.supplierCount").value(0))
             .andExpect(jsonPath("$.totalOutstanding").value(0))
             .andExpect(jsonPath("$.rows", hasSize(0)));
+    }
+
+    @Test
+    void gstReportSplitsOutputAndInputAndSubtractsReturns() throws Exception {
+        mockMvc.perform(put("/settings")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "currencyCode":"INR",
+                      "dateFormat":"dd/MM/yyyy",
+                      "allowNegativeStock":false,
+                      "defaultLowStockThreshold":0,
+                      "gstEnabled":true,
+                      "gstInclusivePricing":false,
+                      "gstin":"29ABCDE1234F1Z5",
+                      "stateCode":"29",
+                      "stateName":"Karnataka"
+                    }
+                    """))
+            .andExpect(status().isOk());
+
+        String productId = createGstProduct();
+        String customerId = createCustomer("GST Buyer");
+        String supplierId = createSupplier("GST Supplier");
+
+        String saleResponse = mockMvc.perform(post("/sales")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "customerId":"%s",
+                      "saleDate":"2026-08-01",
+                      "amountPaid":0,
+                      "interstate":false,
+                      "items":[{"productId":"%s","quantity":10.000,"sellingPrice":100.00,"gstRate":18.00}]
+                    }
+                    """.formatted(customerId, productId)))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+        String saleId = com.jayway.jsonpath.JsonPath.read(saleResponse, "$.id");
+        String saleItemId = com.jayway.jsonpath.JsonPath.read(saleResponse, "$.items[0].id");
+
+        mockMvc.perform(post("/purchases")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "supplierId":"%s",
+                      "purchaseDate":"2026-08-01",
+                      "amountPaid":0,
+                      "interstate":false,
+                      "items":[{"productId":"%s","quantity":10.000,"purchasePrice":50.00,"gstRate":18.00}]
+                    }
+                    """.formatted(supplierId, productId)))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/sales/{saleId}/returns", saleId)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "returnDate":"2026-08-02",
+                      "reason":"Damaged",
+                      "items":[{"saleItemId":"%s","quantity":5.000}]
+                    }
+                    """.formatted(saleItemId)))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/reports/gst")
+                .param("from", "2026-08-01")
+                .param("to", "2026-08-31")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.outputTaxableAmount").value(500.0))
+            .andExpect(jsonPath("$.outputTax").value(90.0))
+            .andExpect(jsonPath("$.inputTaxableAmount").value(500.0))
+            .andExpect(jsonPath("$.inputTax").value(90.0))
+            .andExpect(jsonPath("$.netTax").value(0.0));
+    }
+
+    private String createGstProduct() throws Exception {
+        String response = mockMvc.perform(post("/products")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "name":"GST Cement","sku":"CEM-GST","category":"Cement","unit":"Bags",
+                      "costPrice":50.00,"sellingPrice":100.00,"openingStock":200.000,"lowStockThreshold":10.000,
+                      "hsnCode":"252329","gstRate":18.00
+                    }
+                    """))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+        return com.jayway.jsonpath.JsonPath.read(response, "$.id");
     }
 
     private String createSale(

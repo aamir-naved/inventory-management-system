@@ -10,6 +10,7 @@ public record CustomerResponse(
     String contactPerson,
     String mobileNumber,
     String addressLine,
+    String stateCode,
     boolean archived,
     OffsetDateTime createdAt,
     OffsetDateTime updatedAt

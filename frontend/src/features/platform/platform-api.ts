@@ -78,7 +78,11 @@ export async function createPlatformShop(payload: {
   temporaryPassword?: string;
   provisionStarterCatalog?: boolean;
 }) {
-  return httpClient<{ shop: PlatformShopDetail; temporaryPassword: string }>("/platform/shops", {
+  return httpClient<{
+    shop: PlatformShopDetail;
+    passwordDelivery: "EMAIL" | "PROVIDED";
+    message: string;
+  }>("/platform/shops", {
     method: "POST",
     body: payload,
   });
@@ -99,9 +103,12 @@ export async function updatePlatformShop(
 }
 
 export async function resetPlatformOwnerPassword(id: string) {
-  return httpClient<{ temporaryPassword: string }>(`/platform/shops/${id}/reset-owner`, {
-    method: "POST",
-  });
+  return httpClient<{ passwordDelivery: "EMAIL"; message: string }>(
+    `/platform/shops/${id}/reset-owner`,
+    {
+      method: "POST",
+    },
+  );
 }
 
 export async function listPlatformUsers(options: { search?: string } & PageRequest = {}) {

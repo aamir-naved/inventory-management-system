@@ -72,6 +72,13 @@ class PurchaseControllerTest extends AuthenticatedControllerTestSupport {
             .andExpect(jsonPath("$.outstandingAmount").value(6300.0))
             .andExpect(jsonPath("$.cancelled").value(false));
 
+        mockMvc.perform(get("/products/{id}", productId)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.costPrice").value(319.29))
+            .andExpect(jsonPath("$.currentStock").value(140.0));
+
         mockMvc.perform(get("/inventory")
                 .header("Authorization", authorizationHeader)
                 .header("X-Business-Id", businessId))
@@ -130,7 +137,14 @@ class PurchaseControllerTest extends AuthenticatedControllerTestSupport {
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.cancelled").value(true))
-            .andExpect(jsonPath("$.cancellationReason").value("Supplier entered duplicate bill"));
+            .andExpect(jsonPath("$.cancellationReason").value("Supplier entered duplicate bill"))
+            .andExpect(jsonPath("$.amountPaid").value(0.0));
+
+        mockMvc.perform(get("/purchases/{purchaseId}/payments", purchaseId)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[?(@.paymentKind == 'REFUND')].amount").value(org.hamcrest.Matchers.hasItem(2000.0)));
 
         mockMvc.perform(get("/inventory")
                 .header("Authorization", authorizationHeader)

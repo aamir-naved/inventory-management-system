@@ -1,10 +1,13 @@
+import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   useContext,
+  useEffect,
   useState,
   type PropsWithChildren,
 } from "react";
 
+import { onAuthSessionExpired } from "@/api/auth-session";
 import {
   getCurrentSession,
   login as loginRequest,
@@ -44,9 +47,17 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: PropsWithChildren) {
+  const queryClient = useQueryClient();
   const [authSession, setAuthSession] = useState<AuthSession | null>(() =>
     readStoredAuthSession(),
   );
+
+  useEffect(() => {
+    return onAuthSessionExpired(() => {
+      setAuthSession(null);
+      queryClient.clear();
+    });
+  }, [queryClient]);
 
   async function syncSession(nextSession: AuthSession) {
     writeStoredAuthSession(nextSession);
@@ -139,6 +150,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       } finally {
         clearStoredAuthSession();
         setAuthSession(null);
+        queryClient.clear();
       }
     },
   };

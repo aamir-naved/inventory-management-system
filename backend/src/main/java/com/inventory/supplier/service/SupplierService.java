@@ -107,6 +107,7 @@ public class SupplierService {
             supplier.getContactPerson(),
             supplier.getMobileNumber(),
             supplier.getAddressLine(),
+            supplier.getStateCode(),
             supplier.isArchived(),
             billCount,
             billedAmount,
@@ -145,6 +146,7 @@ public class SupplierService {
         supplier.setContactPerson(normalize(request.contactPerson()));
         supplier.setMobileNumber(normalize(request.mobileNumber()));
         supplier.setAddressLine(normalize(request.addressLine()));
+        supplier.setStateCode(normalizeStateCode(request.stateCode()));
     }
 
     private String normalize(String value) {
@@ -154,6 +156,11 @@ public class SupplierService {
 
         String normalized = value.trim();
         return normalized.isEmpty() ? null : normalized;
+    }
+
+    private String normalizeStateCode(String value) {
+        String normalized = normalize(value);
+        return normalized == null ? null : normalized.toUpperCase();
     }
 
     private String normalizeSearch(String value) {
@@ -182,6 +189,7 @@ public class SupplierService {
             supplier.getContactPerson(),
             supplier.getMobileNumber(),
             supplier.getAddressLine(),
+            supplier.getStateCode(),
             supplier.isArchived(),
             supplier.getCreatedAt(),
             supplier.getUpdatedAt()

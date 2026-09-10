@@ -13,7 +13,6 @@ export type PurchasePayload = {
   purchaseDate: string;
   amountPaid: number;
   notes: string;
-  interstate?: boolean;
   items: PurchaseItemPayload[];
 };
 

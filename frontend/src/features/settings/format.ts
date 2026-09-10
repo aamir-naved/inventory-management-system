@@ -16,10 +16,11 @@ const MONTH_SHORT = [
 export function formatMoney(
   value: number | undefined | null,
   currencyCode = "INR",
+  locale = "en-IN",
 ) {
   const amount = Number(value ?? 0);
   try {
-    return new Intl.NumberFormat(undefined, {
+    return new Intl.NumberFormat(locale, {
       style: "currency",
       currency: currencyCode,
       minimumFractionDigits: 2,
@@ -74,7 +75,7 @@ export function formatDateTime(
     return String(value);
   }
 
-  const time = date.toLocaleTimeString(undefined, {
+  const time = date.toLocaleTimeString("en-IN", {
     hour: "2-digit",
     minute: "2-digit",
   });

@@ -1,10 +1,13 @@
 package com.inventory.purchase.service;
 
 import com.inventory.common.tenant.TenantContext;
+import com.inventory.document.numbering.DocumentNumberService;
+import com.inventory.document.numbering.DocumentType;
 import com.inventory.inventory.entity.InventoryMovement;
 import com.inventory.inventory.repository.InventoryMovementRepository;
 import com.inventory.payment.service.PaymentService;
 import com.inventory.product.entity.Product;
+import com.inventory.product.repository.ProductRepository;
 import com.inventory.purchase.dto.PurchaseReturnItemRequest;
 import com.inventory.purchase.dto.PurchaseReturnItemResponse;
 import com.inventory.purchase.dto.PurchaseReturnRequest;
@@ -16,13 +19,14 @@ import com.inventory.purchase.entity.PurchaseReturnItem;
 import com.inventory.purchase.repository.PurchaseRepository;
 import com.inventory.purchase.repository.PurchaseReturnRepository;
 import com.inventory.settings.service.SettingsService;
+import com.inventory.tax.GstCalculator;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -36,27 +40,33 @@ public class PurchaseReturnService {
 
     private final PurchaseReturnRepository purchaseReturnRepository;
     private final PurchaseRepository purchaseRepository;
+    private final ProductRepository productRepository;
     private final InventoryMovementRepository inventoryMovementRepository;
     private final PaymentService paymentService;
     private final SettingsService settingsService;
+    private final DocumentNumberService documentNumberService;
 
     public PurchaseReturnService(
         PurchaseReturnRepository purchaseReturnRepository,
         PurchaseRepository purchaseRepository,
+        ProductRepository productRepository,
         InventoryMovementRepository inventoryMovementRepository,
         PaymentService paymentService,
-        SettingsService settingsService
+        SettingsService settingsService,
+        DocumentNumberService documentNumberService
     ) {
         this.purchaseReturnRepository = purchaseReturnRepository;
         this.purchaseRepository = purchaseRepository;
+        this.productRepository = productRepository;
         this.inventoryMovementRepository = inventoryMovementRepository;
         this.paymentService = paymentService;
         this.settingsService = settingsService;
+        this.documentNumberService = documentNumberService;
     }
 
     public PurchaseReturnResponse create(UUID purchaseId, PurchaseReturnRequest request) {
         UUID businessId = requireBusinessId();
-        Purchase purchase = findPurchase(purchaseId, businessId);
+        Purchase purchase = findPurchaseForUpdate(purchaseId, businessId);
 
         if (purchase.isCancelled()) {
             throw new IllegalArgumentException("Cancelled purchases cannot accept returns");
@@ -70,11 +80,12 @@ public class PurchaseReturnService {
         Set<UUID> requestedPurchaseItemIds = new HashSet<>();
         List<PurchaseReturnItem> returnItems = new ArrayList<>();
         BigDecimal totalAmount = BigDecimal.ZERO;
+        Map<UUID, BigDecimal> removeByProduct = new HashMap<>();
 
         PurchaseReturn purchaseReturn = new PurchaseReturn();
         purchaseReturn.setBusinessId(businessId);
         purchaseReturn.setPurchase(purchase);
-        purchaseReturn.setReturnNumber(generateReturnNumber());
+        purchaseReturn.setReturnNumber(documentNumberService.next(businessId, DocumentType.PURCHASE_RETURN));
         purchaseReturn.setReturnDate(request.returnDate());
         purchaseReturn.setReason(normalize(request.reason()));
         purchaseReturn.setNotes(normalize(request.notes()));
@@ -100,19 +111,25 @@ public class PurchaseReturnService {
                 );
             }
 
-            Product product = purchaseItem.getProduct();
-            BigDecimal projectedStock = product.getCurrentStock().subtract(itemRequest.quantity());
-            if (projectedStock.compareTo(BigDecimal.ZERO) < 0 && !settingsService.isNegativeStockAllowed()) {
-                throw new IllegalArgumentException(
-                    "Purchase return would make stock negative for " + product.getName()
-                );
-            }
+            removeByProduct.merge(purchaseItem.getProduct().getId(), itemRequest.quantity(), BigDecimal::add);
 
-            BigDecimal lineTotal = itemRequest.quantity().multiply(purchaseItem.getUnitCost());
+            BigDecimal alreadyCredited = purchaseReturnRepository.sumReturnedAmountForPurchaseItem(
+                businessId,
+                purchaseItem.getId()
+            );
+            BigDecimal lineTotal = GstCalculator.proportionalLineCredit(
+                purchaseItem.getLineTotal(),
+                purchaseItem.getQuantity(),
+                itemRequest.quantity(),
+                alreadyReturned,
+                alreadyCredited
+            );
             PurchaseReturnItem returnItem = new PurchaseReturnItem();
             returnItem.setPurchaseReturn(purchaseReturn);
             returnItem.setPurchaseItem(purchaseItem);
-            returnItem.setProduct(product);
+            returnItem.setProduct(purchaseItem.getProduct());
+            returnItem.setProductName(purchaseItem.getProductName());
+            returnItem.setUnit(purchaseItem.getUnit());
             returnItem.setQuantity(itemRequest.quantity());
             returnItem.setUnitCost(purchaseItem.getUnitCost());
             returnItem.setLineTotal(lineTotal);
@@ -120,12 +137,24 @@ public class PurchaseReturnService {
             totalAmount = totalAmount.add(lineTotal);
         }
 
+        Map<UUID, Product> lockedProducts = lockProductsForUpdate(businessId, removeByProduct.keySet());
+        boolean allowNegativeStock = settingsService.isNegativeStockAllowed();
+        for (Map.Entry<UUID, BigDecimal> removal : removeByProduct.entrySet()) {
+            Product product = lockedProducts.get(removal.getKey());
+            BigDecimal projectedStock = product.getCurrentStock().subtract(removal.getValue());
+            if (projectedStock.compareTo(BigDecimal.ZERO) < 0 && !allowNegativeStock) {
+                throw new IllegalArgumentException(
+                    "Purchase return would make stock negative for " + product.getName()
+                );
+            }
+        }
+
         purchaseReturn.setItems(returnItems);
         purchaseReturn.setTotalAmount(totalAmount);
         PurchaseReturn savedReturn = purchaseReturnRepository.save(purchaseReturn);
 
         for (PurchaseReturnItem returnItem : savedReturn.getItems()) {
-            Product product = returnItem.getProduct();
+            Product product = lockedProducts.get(returnItem.getProduct().getId());
             BigDecimal before = product.getCurrentStock();
             BigDecimal after = before.subtract(returnItem.getQuantity());
             product.setCurrentStock(after);
@@ -173,6 +202,27 @@ public class PurchaseReturnService {
             .orElseThrow(() -> new EntityNotFoundException("Purchase not found"));
     }
 
+    private Purchase findPurchaseForUpdate(UUID purchaseId, UUID businessId) {
+        return purchaseRepository.findByIdAndBusinessIdForUpdate(purchaseId, businessId)
+            .orElseThrow(() -> new EntityNotFoundException("Purchase not found"));
+    }
+
+    private Map<UUID, Product> lockProductsForUpdate(UUID businessId, Iterable<UUID> productIds) {
+        List<UUID> orderedIds = new ArrayList<>();
+        for (UUID productId : productIds) {
+            orderedIds.add(productId);
+        }
+        orderedIds.sort(Comparator.naturalOrder());
+
+        Map<UUID, Product> locked = new HashMap<>();
+        for (UUID productId : orderedIds) {
+            Product product = productRepository.findByIdAndBusinessIdForUpdate(productId, businessId)
+                .orElseThrow(() -> new EntityNotFoundException("Product not found"));
+            locked.put(productId, product);
+        }
+        return locked;
+    }
+
     private PurchaseReturn findReturn(UUID returnId) {
         return purchaseReturnRepository.findByIdAndBusinessId(returnId, requireBusinessId())
             .orElseThrow(() -> new EntityNotFoundException("Purchase return not found"));
@@ -200,10 +250,6 @@ public class PurchaseReturnService {
     private UUID requireBusinessId() {
         return TenantContext.getBusinessId()
             .orElseThrow(() -> new IllegalArgumentException("X-Business-Id header is required"));
-    }
-
-    private String generateReturnNumber() {
-        return "PRT-" + LocalDate.now() + "-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
     }
 
     private String normalize(String value) {
@@ -236,8 +282,8 @@ public class PurchaseReturnService {
                 item.getId(),
                 item.getPurchaseItem().getId(),
                 item.getProduct().getId(),
-                item.getProduct().getName(),
-                item.getProduct().getUnit(),
+                item.getProductName(),
+                item.getUnit(),
                 item.getQuantity(),
                 item.getUnitCost(),
                 item.getLineTotal()

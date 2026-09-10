@@ -18,6 +18,7 @@ import com.inventory.auth.entity.AuthToken;
 import com.inventory.auth.entity.AuthTokenType;
 import com.inventory.auth.entity.UserAccount;
 import com.inventory.auth.repository.AuthTokenRepository;
+import com.inventory.auth.repository.UserAccountRepository;
 import com.inventory.config.AuthProperties;
 
 @Service
@@ -25,11 +26,17 @@ import com.inventory.config.AuthProperties;
 public class AuthTokenService {
 
     private final AuthTokenRepository authTokenRepository;
+    private final UserAccountRepository userAccountRepository;
     private final AuthProperties authProperties;
     private final SecureRandom secureRandom = new SecureRandom();
 
-    public AuthTokenService(AuthTokenRepository authTokenRepository, AuthProperties authProperties) {
+    public AuthTokenService(
+        AuthTokenRepository authTokenRepository,
+        UserAccountRepository userAccountRepository,
+        AuthProperties authProperties
+    ) {
         this.authTokenRepository = authTokenRepository;
+        this.userAccountRepository = userAccountRepository;
         this.authProperties = authProperties;
     }
 
@@ -88,6 +95,13 @@ public class AuthTokenService {
                     authTokenRepository.save(token);
                 }
             });
+    }
+
+    /** Invalidates access JWTs (token version) and refresh tokens for the user. */
+    public void revokeSessions(UserAccount user) {
+        user.bumpTokenVersion();
+        userAccountRepository.saveAndFlush(user);
+        revokeRefreshTokens(user.getId());
     }
 
     public static String hashToken(String rawToken) {

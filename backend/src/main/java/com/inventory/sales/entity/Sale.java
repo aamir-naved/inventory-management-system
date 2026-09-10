@@ -10,6 +10,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -19,6 +20,10 @@ import java.util.List;
 @Entity
 @Table(name = "sales")
 public class Sale extends TenantAwareEntity {
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 
     @Column(name = "sale_number", nullable = false, length = 40)
     private String saleNumber;

@@ -11,6 +11,7 @@ public record CustomerSummaryResponse(
     String contactPerson,
     String mobileNumber,
     String addressLine,
+    String stateCode,
     boolean archived,
     long invoiceCount,
     BigDecimal netBilled,

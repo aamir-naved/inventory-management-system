@@ -7,6 +7,7 @@ export type CustomerPayload = {
   contactPerson: string;
   mobileNumber: string;
   addressLine: string;
+  stateCode: string;
 };
 
 export type CustomerRecord = {
@@ -16,6 +17,7 @@ export type CustomerRecord = {
   contactPerson: string | null;
   mobileNumber: string | null;
   addressLine: string | null;
+  stateCode: string | null;
   archived: boolean;
   createdAt: string;
   updatedAt: string;
@@ -28,6 +30,7 @@ export type CustomerSummary = {
   contactPerson: string | null;
   mobileNumber: string | null;
   addressLine: string | null;
+  stateCode: string | null;
   archived: boolean;
   invoiceCount: number;
   netBilled: number;

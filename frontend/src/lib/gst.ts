@@ -58,3 +58,16 @@ export function computeGstLine(
     lineTotal: roundMoney(taxable + cgstAmount + sgstAmount + igstAmount),
   };
 }
+
+/** True when party and business GST state codes both exist and differ. */
+export function isInterstateSupply(
+  businessStateCode: string | null | undefined,
+  partyStateCode: string | null | undefined,
+) {
+  const business = businessStateCode?.trim().toUpperCase() ?? "";
+  const party = partyStateCode?.trim().toUpperCase() ?? "";
+  if (!business || !party) {
+    return false;
+  }
+  return business !== party;
+}

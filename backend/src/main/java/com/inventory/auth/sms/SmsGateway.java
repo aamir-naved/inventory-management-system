@@ -36,7 +36,8 @@ public class SmsGateway {
 
         String webhook = authProperties.getSmsWebhookUrl();
         if (webhook == null || webhook.isBlank()) {
-            log.info("SMS not configured; logging OTP message. to={} body={}", to, body);
+            // Never log OTP codes. Non-prod keeps an in-memory capture for tests only.
+            log.warn("SMS webhook not configured; OTP not logged. to={}", to);
             return;
         }
 

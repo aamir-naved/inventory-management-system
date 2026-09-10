@@ -42,14 +42,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             try {
                 AuthenticatedUser parsed = jwtService.parse(authorization.substring(7));
                 UserAccount account = userAccountRepository.findById(parsed.userId()).orElse(null);
-                if (account == null || !account.isActive()) {
+                if (account == null || !account.isActive() || account.getTokenVersion() != parsed.tokenVersion()) {
                     FilterResponses.json(response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid or expired access token");
                     return;
                 }
                 AuthenticatedUser user = new AuthenticatedUser(
                     account.getId(),
                     account.getEmail() != null ? account.getEmail() : account.getPhone(),
-                    account.isPlatformAdmin()
+                    account.isPlatformAdmin(),
+                    account.getTokenVersion()
                 );
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                     user,

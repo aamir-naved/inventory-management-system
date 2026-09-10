@@ -26,10 +26,10 @@ Sign in on the shop URL with **Email** (not OTP unless you also stored a phone o
 
 1. **Shops** → **Add shop**
 2. Shop name, owner name, email, 10-digit phone
-3. Optional temporary password (otherwise generated)
+3. Optional temporary password (otherwise generated and emailed)
 4. Leave starter catalog on unless they already have their own list
-5. Copy the password shown once. Email is also sent if SMTP is configured.
-6. Send the owner the HTTPS URL + email + password (or tell them to use OTP on that phone)
+5. Credentials are emailed to the owner — the API never returns the password in JSON
+6. Send the owner the HTTPS URL (or tell them to use OTP on that phone)
 
 The owner signs in on the normal shop UI and bills from **Counter**. They cannot open `/platform` or another shop’s data.
 
@@ -38,9 +38,9 @@ The owner signs in on the normal shop UI and bills from **Counter**. They cannot
 ## Suspend / disable
 
 - **Suspend shop** — members keep existing passwords but every shop API with `X-Business-Id` returns 403.
-- **Reset owner password** — new temp password, shown once.
-- **Users → Disable** — blocks that login. You cannot disable the last platform admin.
+- **Reset owner password** — new temp password emailed to the owner (not returned in the API).
+- **Users → Disable** — blocks that login and revokes active sessions. You cannot disable the last platform admin.
 
 Plans show as `standard` only. No billing yet.
 
-Backups are unchanged: `./scripts/backup.sh` on the VPS, copy files off the machine.
+Backups: set `BACKUP_COPY_DIR` off the VPS disk, run `./scripts/install-backup-cron.sh`, and use `./scripts/restore.sh` for a stop → drop → restore → verify recovery.

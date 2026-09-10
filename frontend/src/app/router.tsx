@@ -1,36 +1,131 @@
+import { Suspense, lazy, type ReactNode } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { AppLayout } from "@/components/layout/app-layout";
 import { AuthLayout } from "@/components/layout/auth-layout";
 import { PlatformLayout } from "@/components/layout/platform-layout";
-import { DashboardPage } from "@/features/dashboard/dashboard-page";
-import { ForgotPasswordPage } from "@/features/auth/forgot-password-page";
-import { LoginPage } from "@/features/auth/login-page";
-import { ProfilePage } from "@/features/auth/profile-page";
 import { ProtectedRoute } from "@/features/auth/protected-route";
 import { PublicRoute } from "@/features/auth/public-route";
-import { ResetPasswordPage } from "@/features/auth/reset-password-page";
-import { VerifyEmailPage } from "@/features/auth/verify-email-page";
-import { BusinessSetupPage } from "@/features/business/business-setup-page";
-import { WelcomePage } from "@/features/business/welcome-page";
-import { CustomersPage } from "@/features/customers/customers-page";
-import { InventoryPage } from "@/features/inventory/inventory-page";
-import { PurchasesPage } from "@/features/purchases/purchases-page";
-import { ProductsPage } from "@/features/products/products-page";
-import { ReportsPage } from "@/features/reports/reports-page";
-import { SalesPage } from "@/features/sales/sales-page";
-import { SettingsPage } from "@/features/settings/settings-page";
-import { SuppliersPage } from "@/features/suppliers/suppliers-page";
-import { AuditPage } from "@/features/audit/audit-page";
-import { PosPage } from "@/features/pos/pos-page";
-import { TeamPage } from "@/features/staff/team-page";
-import { AcceptInvitePage } from "@/features/staff/accept-invite-page";
-import { PlatformDashboardPage } from "@/features/platform/platform-dashboard-page";
-import { PlatformShopsPage } from "@/features/platform/platform-shops-page";
-import { PlatformAddShopPage } from "@/features/platform/platform-add-shop-page";
-import { PlatformShopDetailPage } from "@/features/platform/platform-shop-detail-page";
-import { PlatformUsersPage } from "@/features/platform/platform-users-page";
-import { PlatformSettingsPage } from "@/features/platform/platform-settings-page";
+import { RouteFallback } from "@/i18n/route-fallback";
+
+const LoginPage = lazy(() =>
+  import("@/features/auth/login-page").then((module) => ({ default: module.LoginPage })),
+);
+const ForgotPasswordPage = lazy(() =>
+  import("@/features/auth/forgot-password-page").then((module) => ({
+    default: module.ForgotPasswordPage,
+  })),
+);
+const ResetPasswordPage = lazy(() =>
+  import("@/features/auth/reset-password-page").then((module) => ({
+    default: module.ResetPasswordPage,
+  })),
+);
+const VerifyEmailPage = lazy(() =>
+  import("@/features/auth/verify-email-page").then((module) => ({
+    default: module.VerifyEmailPage,
+  })),
+);
+const ProfilePage = lazy(() =>
+  import("@/features/auth/profile-page").then((module) => ({ default: module.ProfilePage })),
+);
+const WelcomePage = lazy(() =>
+  import("@/features/business/welcome-page").then((module) => ({ default: module.WelcomePage })),
+);
+const BusinessSetupPage = lazy(() =>
+  import("@/features/business/business-setup-page").then((module) => ({
+    default: module.BusinessSetupPage,
+  })),
+);
+const DashboardPage = lazy(() =>
+  import("@/features/dashboard/dashboard-page").then((module) => ({
+    default: module.DashboardPage,
+  })),
+);
+const CustomersPage = lazy(() =>
+  import("@/features/customers/customers-page").then((module) => ({
+    default: module.CustomersPage,
+  })),
+);
+const InventoryPage = lazy(() =>
+  import("@/features/inventory/inventory-page").then((module) => ({
+    default: module.InventoryPage,
+  })),
+);
+const PurchasesPage = lazy(() =>
+  import("@/features/purchases/purchases-page").then((module) => ({
+    default: module.PurchasesPage,
+  })),
+);
+const ProductsPage = lazy(() =>
+  import("@/features/products/products-page").then((module) => ({
+    default: module.ProductsPage,
+  })),
+);
+const ReportsPage = lazy(() =>
+  import("@/features/reports/reports-page").then((module) => ({ default: module.ReportsPage })),
+);
+const SalesPage = lazy(() =>
+  import("@/features/sales/sales-page").then((module) => ({ default: module.SalesPage })),
+);
+const SettingsPage = lazy(() =>
+  import("@/features/settings/settings-page").then((module) => ({
+    default: module.SettingsPage,
+  })),
+);
+const SuppliersPage = lazy(() =>
+  import("@/features/suppliers/suppliers-page").then((module) => ({
+    default: module.SuppliersPage,
+  })),
+);
+const AuditPage = lazy(() =>
+  import("@/features/audit/audit-page").then((module) => ({ default: module.AuditPage })),
+);
+const PosPage = lazy(() =>
+  import("@/features/pos/pos-page").then((module) => ({ default: module.PosPage })),
+);
+const TeamPage = lazy(() =>
+  import("@/features/staff/team-page").then((module) => ({ default: module.TeamPage })),
+);
+const AcceptInvitePage = lazy(() =>
+  import("@/features/staff/accept-invite-page").then((module) => ({
+    default: module.AcceptInvitePage,
+  })),
+);
+const PlatformDashboardPage = lazy(() =>
+  import("@/features/platform/platform-dashboard-page").then((module) => ({
+    default: module.PlatformDashboardPage,
+  })),
+);
+const PlatformShopsPage = lazy(() =>
+  import("@/features/platform/platform-shops-page").then((module) => ({
+    default: module.PlatformShopsPage,
+  })),
+);
+const PlatformAddShopPage = lazy(() =>
+  import("@/features/platform/platform-add-shop-page").then((module) => ({
+    default: module.PlatformAddShopPage,
+  })),
+);
+const PlatformShopDetailPage = lazy(() =>
+  import("@/features/platform/platform-shop-detail-page").then((module) => ({
+    default: module.PlatformShopDetailPage,
+  })),
+);
+const PlatformUsersPage = lazy(() =>
+  import("@/features/platform/platform-users-page").then((module) => ({
+    default: module.PlatformUsersPage,
+  })),
+);
+const PlatformSettingsPage = lazy(() =>
+  import("@/features/platform/platform-settings-page").then((module) => ({
+    default: module.PlatformSettingsPage,
+  })),
+);
+
+function withSuspense(element: ReactNode) {
+  return <Suspense fallback={<RouteFallback />}>{element}</Suspense>;
+}
 
 export const router = createBrowserRouter([
   {
@@ -38,18 +133,18 @@ export const router = createBrowserRouter([
     children: [
       {
         path: "/login",
-        element: (
+        element: withSuspense(
           <AuthLayout>
             <LoginPage />
-          </AuthLayout>
+          </AuthLayout>,
         ),
       },
       {
         path: "/forgot-password",
-        element: (
+        element: withSuspense(
           <AuthLayout>
             <ForgotPasswordPage />
-          </AuthLayout>
+          </AuthLayout>,
         ),
       },
     ],
@@ -58,26 +153,26 @@ export const router = createBrowserRouter([
     children: [
       {
         path: "/reset-password",
-        element: (
+        element: withSuspense(
           <AuthLayout>
             <ResetPasswordPage />
-          </AuthLayout>
+          </AuthLayout>,
         ),
       },
       {
         path: "/verify-email",
-        element: (
+        element: withSuspense(
           <AuthLayout>
             <VerifyEmailPage />
-          </AuthLayout>
+          </AuthLayout>,
         ),
       },
       {
         path: "/accept-invite",
-        element: (
+        element: withSuspense(
           <AuthLayout>
             <AcceptInvitePage />
-          </AuthLayout>
+          </AuthLayout>,
         ),
       },
     ],
@@ -88,12 +183,12 @@ export const router = createBrowserRouter([
       {
         element: <PlatformLayout />,
         children: [
-          { path: "/platform", element: <PlatformDashboardPage /> },
-          { path: "/platform/shops", element: <PlatformShopsPage /> },
-          { path: "/platform/shops/new", element: <PlatformAddShopPage /> },
-          { path: "/platform/shops/:id", element: <PlatformShopDetailPage /> },
-          { path: "/platform/users", element: <PlatformUsersPage /> },
-          { path: "/platform/settings", element: <PlatformSettingsPage /> },
+          { path: "/platform", element: withSuspense(<PlatformDashboardPage />) },
+          { path: "/platform/shops", element: withSuspense(<PlatformShopsPage />) },
+          { path: "/platform/shops/new", element: withSuspense(<PlatformAddShopPage />) },
+          { path: "/platform/shops/:id", element: withSuspense(<PlatformShopDetailPage />) },
+          { path: "/platform/users", element: withSuspense(<PlatformUsersPage />) },
+          { path: "/platform/settings", element: withSuspense(<PlatformSettingsPage />) },
         ],
       },
       {
@@ -103,66 +198,21 @@ export const router = createBrowserRouter([
             index: true,
             element: <Navigate to="/pos" replace />,
           },
-          {
-            path: "/welcome",
-            element: <WelcomePage />,
-          },
-          {
-            path: "/dashboard",
-            element: <DashboardPage />,
-          },
-          {
-            path: "/business-setup",
-            element: <BusinessSetupPage />,
-          },
-          {
-            path: "/profile",
-            element: <ProfilePage />,
-          },
-          {
-            path: "/products",
-            element: <ProductsPage />,
-          },
-          {
-            path: "/inventory",
-            element: <InventoryPage />,
-          },
-          {
-            path: "/suppliers",
-            element: <SuppliersPage />,
-          },
-          {
-            path: "/customers",
-            element: <CustomersPage />,
-          },
-          {
-            path: "/purchases",
-            element: <PurchasesPage />,
-          },
-          {
-            path: "/sales",
-            element: <SalesPage />,
-          },
-          {
-            path: "/pos",
-            element: <PosPage />,
-          },
-          {
-            path: "/team",
-            element: <TeamPage />,
-          },
-          {
-            path: "/audit",
-            element: <AuditPage />,
-          },
-          {
-            path: "/reports",
-            element: <ReportsPage />,
-          },
-          {
-            path: "/settings",
-            element: <SettingsPage />,
-          },
+          { path: "/welcome", element: withSuspense(<WelcomePage />) },
+          { path: "/dashboard", element: withSuspense(<DashboardPage />) },
+          { path: "/business-setup", element: withSuspense(<BusinessSetupPage />) },
+          { path: "/profile", element: withSuspense(<ProfilePage />) },
+          { path: "/products", element: withSuspense(<ProductsPage />) },
+          { path: "/inventory", element: withSuspense(<InventoryPage />) },
+          { path: "/suppliers", element: withSuspense(<SuppliersPage />) },
+          { path: "/customers", element: withSuspense(<CustomersPage />) },
+          { path: "/purchases", element: withSuspense(<PurchasesPage />) },
+          { path: "/sales", element: withSuspense(<SalesPage />) },
+          { path: "/pos", element: withSuspense(<PosPage />) },
+          { path: "/team", element: withSuspense(<TeamPage />) },
+          { path: "/audit", element: withSuspense(<AuditPage />) },
+          { path: "/reports", element: withSuspense(<ReportsPage />) },
+          { path: "/settings", element: withSuspense(<SettingsPage />) },
         ],
       },
     ],

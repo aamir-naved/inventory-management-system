@@ -136,6 +136,7 @@ public class PlatformService {
         String password = StringUtils.hasText(request.temporaryPassword())
             ? request.temporaryPassword().trim()
             : generatePassword();
+        boolean passwordProvided = StringUtils.hasText(request.temporaryPassword());
 
         UserAccount owner = new UserAccount();
         owner.setFullName(request.ownerName().trim());
@@ -182,7 +183,11 @@ public class PlatformService {
                 + "Change this password after you sign in."
         ));
 
-        return new PlatformCreateShopResponse(toDetail(business), password);
+        String delivery = passwordProvided ? "PROVIDED" : "EMAIL";
+        String message = passwordProvided
+            ? "Shop created. Use the temporary password you entered; it was also emailed to the owner."
+            : "Shop created. A temporary password was emailed to the owner and is not returned by the API.";
+        return new PlatformCreateShopResponse(toDetail(business), delivery, message);
     }
 
     public PlatformShopDetailResponse updateShop(UUID id, PlatformShopUpdateRequest request) {
@@ -210,8 +215,8 @@ public class PlatformService {
         String password = generatePassword();
         owner.setPasswordHash(passwordEncoder.encode(password));
         owner.setActive(true);
+        authTokenService.revokeSessions(owner);
         userAccountRepository.save(owner);
-        authTokenService.revokeRefreshTokens(owner.getId());
         if (owner.getEmail() != null) {
             mailService.send(new MailMessage(
                 owner.getEmail(),
@@ -221,7 +226,10 @@ public class PlatformService {
                     + "Temporary password: " + password + "\n"
             ));
         }
-        return new PlatformPasswordResetResponse(password);
+        return new PlatformPasswordResetResponse(
+            "EMAIL",
+            "A temporary password was emailed to the owner and is not returned by the API."
+        );
     }
 
     @Transactional(readOnly = true)
@@ -249,7 +257,7 @@ public class PlatformService {
             }
             user.setActive(request.active());
             if (!request.active()) {
-                authTokenService.revokeRefreshTokens(user.getId());
+                authTokenService.revokeSessions(user);
             }
         }
         BusinessMembership membership = businessMembershipRepository.findAllByUser_Id(user.getId()).stream()

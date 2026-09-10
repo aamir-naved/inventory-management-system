@@ -80,15 +80,41 @@ Then:
 ./scripts/deploy.sh
 ```
 
-That starts Compose with [docker-compose.prod.yml](docker-compose.prod.yml): Caddy on 80/443, Postgres and the API **not** published on the host, `prod` fail-fast on the backend.
-
-Backups:
+That builds tagged images (`ims-backend` / `ims-frontend` with `IMAGE_TAG`), starts Compose with [docker-compose.prod.yml](docker-compose.prod.yml), waits for `/api/actuator/health`, and records `.deploy/current` (previous tag kept for rollback). Caddy on 80/443, Postgres and the API **not** published on the host, `prod` fail-fast on the backend (including rejecting the example `POSTGRES_PASSWORD`).
 
 ```bash
-./scripts/backup.sh
-./scripts/restore.sh backups/inventory-YYYYMMDDTHHMMSSZ.sql.gz
+./scripts/rollback.sh   # or: make rollback
 ```
 
+Restores the previous image tag and re-checks health.
+
+Backups (run on the VPS, not the shop PC):
+
+```bash
+# Required in prod: path off this machine (USB mount, second volume, synced folder)
+# BACKUP_COPY_DIR=/mnt/shop-backups   # in .env
+
+./scripts/install-backup-cron.sh   # nightly 02:15 UTC → dump + off-server copy + retention
+./scripts/backup.sh                # manual run
+./scripts/restore.sh backups/inventory-YYYYMMDDTHHMMSSZ.sql.gz   # stop → drop → restore → verify
+```
+
+`restore.sh` is destructive: it stops the API/UI, drops the database, restores the dump, verifies public tables exist, then starts the app again.
+
+Uptime (something outside the shop VPS must watch the health URL):
+
+```bash
+# Required in prod .env
+# UPTIME_ALERT_PHONE=+9198XXXXXXXX
+# HEALTH_CHECK_URL=https://your-shop.example.com/api/actuator/health
+
+./scripts/uptime-check.sh                 # manual probe + SMS/webhook on failure
+./scripts/install-uptime-cron.sh          # only on a second host / watchdog — not as the sole monitor
+```
+
+Also set GitHub Actions secrets `HEALTH_CHECK_URL`, `UPTIME_ALERT_PHONE`, and `APP_SMS_WEBHOOK_URL` so [`.github/workflows/uptime.yml`](.github/workflows/uptime.yml) probes every 5 minutes from GitHub's runners. As a second path, point a free external monitor (UptimeRobot / Better Stack) at `/api/actuator/health` with SMS or phone-push alerts.
+
+Prod containers get memory limits (defaults ~2 GB VPS: Postgres 512 m, API 768 m, UI/Caddy 128 m each), JVM heap via `MaxRAMPercentage=75`, and json-file log rotation (`10m` × 3). Override with `*_MEMORY_LIMIT` / `DOCKER_LOG_*` in `.env`.
 ## Host development (without Compose)
 
 Prerequisites: JDK 17, Maven 3.9+, Node 22, and a running PostgreSQL database.
@@ -109,7 +135,7 @@ npm run dev
 
 The Vite app calls `http://localhost:8080/api` unless you set `VITE_API_URL`. CORS already allows `http://localhost:5173`.
 
-Day-to-day start/stop/restart commands: [running-app.md](running-app.md). Tests: `./scripts/test.sh` (backend `mvn test`, frontend `npm test` + build).
+Day-to-day start/stop/restart commands: [running-app.md](running-app.md). Tests: `./scripts/test.sh` (backend `mvn test`, frontend `npm test` + build). Counter E2E against Compose: `make e2e` (or `./scripts/e2e.sh`).
 
 ## Environment variables
 
@@ -130,6 +156,15 @@ Copy [.env.example](.env.example) to `.env` for Compose interpolation.
 | `APP_MAIL_FROM` | `noreply@inventory.local` | From address when SMTP is enabled |
 | `APP_CORS_ALLOWED_ORIGINS` | Vite hosts in `dev` | Compose UI is same-origin |
 | `APP_DOMAIN` / `ACME_EMAIL` | unset | Caddy HTTPS in the prod overlay |
+| `BACKUP_COPY_DIR` | unset | **Required for prod deploy** — off-server path for nightly dumps |
+| `BACKUP_RETENTION_DAYS` | `14` | Prune local + off-server dumps older than N days |
+| `UPTIME_ALERT_PHONE` | unset | **Required for prod deploy** — E.164 phone for downtime SMS |
+| `HEALTH_CHECK_URL` | derived from `APP_PUBLIC_APP_URL` | Public `/api/actuator/health` URL for external probes |
+| `UPTIME_ALERT_WEBHOOK_URL` | unset | Optional POST `{status,message,url}` alert channel |
+| `POSTGRES_MEMORY_LIMIT` | `512m` | Prod Postgres cgroup memory limit |
+| `BACKEND_MEMORY_LIMIT` | `768m` | Prod API cgroup memory limit |
+| `JAVA_TOOL_OPTIONS` | `MaxRAMPercentage=75` | JVM heap relative to the container limit |
+| `DOCKER_LOG_MAX_SIZE` / `DOCKER_LOG_MAX_FILE` | `10m` / `3` | Prod json-file log rotation |
 | `APP_SMS_WEBHOOK_URL` | unset | Optional POST `{to,body}` for OTP SMS; otherwise logs the code |
 | `APP_OPEN_REGISTRATION` | `true` in `dev`, `false` in `prod` | When false, only Super Admin creates shops |
 | `APP_PLATFORM_ADMIN_EMAIL` | unset | Bootstrap Super Admin; **required** in prod if registration is closed |

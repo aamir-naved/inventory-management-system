@@ -7,6 +7,7 @@ export type SupplierPayload = {
   contactPerson: string;
   mobileNumber: string;
   addressLine: string;
+  stateCode: string;
 };
 
 export type SupplierRecord = {
@@ -16,6 +17,7 @@ export type SupplierRecord = {
   contactPerson: string | null;
   mobileNumber: string | null;
   addressLine: string | null;
+  stateCode: string | null;
   archived: boolean;
   createdAt: string;
   updatedAt: string;
@@ -28,6 +30,7 @@ export type SupplierSummary = {
   contactPerson: string | null;
   mobileNumber: string | null;
   addressLine: string | null;
+  stateCode: string | null;
   archived: boolean;
   billCount: number;
   billedAmount: number;

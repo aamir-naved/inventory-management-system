@@ -289,14 +289,24 @@ public class ReportService {
         UUID businessId = requireBusinessId();
         validateDateRange(from, to);
         List<GstReportResponse.Row> rows = new ArrayList<>();
-        BigDecimal taxable = BigDecimal.ZERO;
-        BigDecimal cgst = BigDecimal.ZERO;
-        BigDecimal sgst = BigDecimal.ZERO;
-        BigDecimal igst = BigDecimal.ZERO;
+
+        BigDecimal outputTaxable = BigDecimal.ZERO;
+        BigDecimal outputCgst = BigDecimal.ZERO;
+        BigDecimal outputSgst = BigDecimal.ZERO;
+        BigDecimal outputIgst = BigDecimal.ZERO;
+
+        BigDecimal inputTaxable = BigDecimal.ZERO;
+        BigDecimal inputCgst = BigDecimal.ZERO;
+        BigDecimal inputSgst = BigDecimal.ZERO;
+        BigDecimal inputIgst = BigDecimal.ZERO;
 
         for (Sale sale : saleRepository.findForReport(businessId, from, to)) {
             Hibernate.initialize(sale.getItems());
             for (com.inventory.sales.entity.SaleItem item : sale.getItems()) {
+                BigDecimal taxable = nullSafe(item.getTaxableAmount());
+                BigDecimal cgst = nullSafe(item.getCgstAmount());
+                BigDecimal sgst = nullSafe(item.getSgstAmount());
+                BigDecimal igst = nullSafe(item.getIgstAmount());
                 rows.add(new GstReportResponse.Row(
                     "SALE",
                     sale.getSaleNumber(),
@@ -304,20 +314,57 @@ public class ReportService {
                     sale.getCustomer().getName(),
                     sale.isInterstate(),
                     nullSafe(item.getGstRate()),
-                    nullSafe(item.getTaxableAmount()),
-                    nullSafe(item.getCgstAmount()),
-                    nullSafe(item.getSgstAmount()),
-                    nullSafe(item.getIgstAmount())
+                    taxable,
+                    cgst,
+                    sgst,
+                    igst
                 ));
-                taxable = taxable.add(nullSafe(item.getTaxableAmount()));
-                cgst = cgst.add(nullSafe(item.getCgstAmount()));
-                sgst = sgst.add(nullSafe(item.getSgstAmount()));
-                igst = igst.add(nullSafe(item.getIgstAmount()));
+                outputTaxable = outputTaxable.add(taxable);
+                outputCgst = outputCgst.add(cgst);
+                outputSgst = outputSgst.add(sgst);
+                outputIgst = outputIgst.add(igst);
             }
         }
+
+        for (com.inventory.sales.entity.SaleReturn saleReturn : saleReturnRepository.findForReport(businessId, from, to)) {
+            Hibernate.initialize(saleReturn.getItems());
+            Sale sale = saleReturn.getSale();
+            for (com.inventory.sales.entity.SaleReturnItem returnItem : saleReturn.getItems()) {
+                com.inventory.sales.entity.SaleItem saleItem = returnItem.getSaleItem();
+                TaxSlice reversed = reverseTaxShare(
+                    nullSafe(saleItem.getLineTotal()),
+                    nullSafe(returnItem.getLineTotal()),
+                    nullSafe(saleItem.getTaxableAmount()),
+                    nullSafe(saleItem.getCgstAmount()),
+                    nullSafe(saleItem.getSgstAmount()),
+                    nullSafe(saleItem.getIgstAmount())
+                );
+                rows.add(new GstReportResponse.Row(
+                    "SALE_RETURN",
+                    saleReturn.getReturnNumber(),
+                    saleReturn.getReturnDate(),
+                    sale.getCustomer().getName(),
+                    sale.isInterstate(),
+                    nullSafe(saleItem.getGstRate()),
+                    reversed.taxable().negate(),
+                    reversed.cgst().negate(),
+                    reversed.sgst().negate(),
+                    reversed.igst().negate()
+                ));
+                outputTaxable = outputTaxable.subtract(reversed.taxable());
+                outputCgst = outputCgst.subtract(reversed.cgst());
+                outputSgst = outputSgst.subtract(reversed.sgst());
+                outputIgst = outputIgst.subtract(reversed.igst());
+            }
+        }
+
         for (Purchase purchase : purchaseRepository.findForReport(businessId, from, to)) {
             Hibernate.initialize(purchase.getItems());
             for (com.inventory.purchase.entity.PurchaseItem item : purchase.getItems()) {
+                BigDecimal taxable = nullSafe(item.getTaxableAmount());
+                BigDecimal cgst = nullSafe(item.getCgstAmount());
+                BigDecimal sgst = nullSafe(item.getSgstAmount());
+                BigDecimal igst = nullSafe(item.getIgstAmount());
                 rows.add(new GstReportResponse.Row(
                     "PURCHASE",
                     purchase.getPurchaseNumber(),
@@ -325,29 +372,104 @@ public class ReportService {
                     purchase.getSupplier().getName(),
                     purchase.isInterstate(),
                     nullSafe(item.getGstRate()),
-                    nullSafe(item.getTaxableAmount()),
-                    nullSafe(item.getCgstAmount()),
-                    nullSafe(item.getSgstAmount()),
-                    nullSafe(item.getIgstAmount())
+                    taxable,
+                    cgst,
+                    sgst,
+                    igst
                 ));
-                taxable = taxable.add(nullSafe(item.getTaxableAmount()));
-                cgst = cgst.add(nullSafe(item.getCgstAmount()));
-                sgst = sgst.add(nullSafe(item.getSgstAmount()));
-                igst = igst.add(nullSafe(item.getIgstAmount()));
+                inputTaxable = inputTaxable.add(taxable);
+                inputCgst = inputCgst.add(cgst);
+                inputSgst = inputSgst.add(sgst);
+                inputIgst = inputIgst.add(igst);
             }
         }
+
+        for (com.inventory.purchase.entity.PurchaseReturn purchaseReturn
+            : purchaseReturnRepository.findForReport(businessId, from, to)) {
+            Hibernate.initialize(purchaseReturn.getItems());
+            Purchase purchase = purchaseReturn.getPurchase();
+            for (com.inventory.purchase.entity.PurchaseReturnItem returnItem : purchaseReturn.getItems()) {
+                com.inventory.purchase.entity.PurchaseItem purchaseItem = returnItem.getPurchaseItem();
+                TaxSlice reversed = reverseTaxShare(
+                    nullSafe(purchaseItem.getLineTotal()),
+                    nullSafe(returnItem.getLineTotal()),
+                    nullSafe(purchaseItem.getTaxableAmount()),
+                    nullSafe(purchaseItem.getCgstAmount()),
+                    nullSafe(purchaseItem.getSgstAmount()),
+                    nullSafe(purchaseItem.getIgstAmount())
+                );
+                rows.add(new GstReportResponse.Row(
+                    "PURCHASE_RETURN",
+                    purchaseReturn.getReturnNumber(),
+                    purchaseReturn.getReturnDate(),
+                    purchase.getSupplier().getName(),
+                    purchase.isInterstate(),
+                    nullSafe(purchaseItem.getGstRate()),
+                    reversed.taxable().negate(),
+                    reversed.cgst().negate(),
+                    reversed.sgst().negate(),
+                    reversed.igst().negate()
+                ));
+                inputTaxable = inputTaxable.subtract(reversed.taxable());
+                inputCgst = inputCgst.subtract(reversed.cgst());
+                inputSgst = inputSgst.subtract(reversed.sgst());
+                inputIgst = inputIgst.subtract(reversed.igst());
+            }
+        }
+
+        BigDecimal outputTax = outputCgst.add(outputSgst).add(outputIgst);
+        BigDecimal inputTax = inputCgst.add(inputSgst).add(inputIgst);
+        BigDecimal netCgst = outputCgst.subtract(inputCgst);
+        BigDecimal netSgst = outputSgst.subtract(inputSgst);
+        BigDecimal netIgst = outputIgst.subtract(inputIgst);
 
         return new GstReportResponse(
             OffsetDateTime.now(),
             from,
             to,
-            taxable,
-            cgst,
-            sgst,
-            igst,
-            cgst.add(sgst).add(igst),
+            outputTaxable,
+            outputCgst,
+            outputSgst,
+            outputIgst,
+            outputTax,
+            inputTaxable,
+            inputCgst,
+            inputSgst,
+            inputIgst,
+            inputTax,
+            netCgst,
+            netSgst,
+            netIgst,
+            netCgst.add(netSgst).add(netIgst),
             rows
         );
+    }
+
+    private TaxSlice reverseTaxShare(
+        BigDecimal originalLineTotal,
+        BigDecimal returnLineTotal,
+        BigDecimal taxable,
+        BigDecimal cgst,
+        BigDecimal sgst,
+        BigDecimal igst
+    ) {
+        if (originalLineTotal.compareTo(BigDecimal.ZERO) <= 0 || returnLineTotal.compareTo(BigDecimal.ZERO) <= 0) {
+            return new TaxSlice(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+        }
+        if (returnLineTotal.compareTo(originalLineTotal) == 0) {
+            return new TaxSlice(taxable, cgst, sgst, igst);
+        }
+        java.math.RoundingMode halfUp = java.math.RoundingMode.HALF_UP;
+        BigDecimal ratio = returnLineTotal.divide(originalLineTotal, 8, halfUp);
+        return new TaxSlice(
+            taxable.multiply(ratio).setScale(2, halfUp),
+            cgst.multiply(ratio).setScale(2, halfUp),
+            sgst.multiply(ratio).setScale(2, halfUp),
+            igst.multiply(ratio).setScale(2, halfUp)
+        );
+    }
+
+    private record TaxSlice(BigDecimal taxable, BigDecimal cgst, BigDecimal sgst, BigDecimal igst) {
     }
 
     private Map<UUID, BigDecimal> returnedAmountsBySale(UUID businessId) {

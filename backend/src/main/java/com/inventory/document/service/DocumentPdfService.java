@@ -110,7 +110,7 @@ public class DocumentPdfService {
                 for (SaleItem item : sale.getItems()) {
                     addItemRow(
                         items,
-                        item.getProduct().getName(),
+                        item.getProductName(),
                         blankToDash(item.getHsnCode()),
                         formatQty(item.getQuantity()),
                         formatMoney(item.getUnitPrice(), business.getCurrencyCode()),
@@ -124,8 +124,8 @@ public class DocumentPdfService {
                 for (SaleItem item : sale.getItems()) {
                     addItemRow(
                         items,
-                        item.getProduct().getName(),
-                        item.getProduct().getUnit(),
+                        item.getProductName(),
+                        item.getUnit(),
                         formatQty(item.getQuantity()),
                         formatMoney(item.getUnitPrice(), business.getCurrencyCode()),
                         formatMoney(item.getLineTotal(), business.getCurrencyCode())
@@ -214,7 +214,7 @@ public class DocumentPdfService {
                 for (PurchaseItem item : purchase.getItems()) {
                     addItemRow(
                         items,
-                        item.getProduct().getName(),
+                        item.getProductName(),
                         blankToDash(item.getHsnCode()),
                         formatQty(item.getQuantity()),
                         formatMoney(item.getUnitCost(), business.getCurrencyCode()),
@@ -228,8 +228,8 @@ public class DocumentPdfService {
                 for (PurchaseItem item : purchase.getItems()) {
                     addItemRow(
                         items,
-                        item.getProduct().getName(),
-                        item.getProduct().getUnit(),
+                        item.getProductName(),
+                        item.getUnit(),
                         formatQty(item.getQuantity()),
                         formatMoney(item.getUnitCost(), business.getCurrencyCode()),
                         formatMoney(item.getLineTotal(), business.getCurrencyCode())

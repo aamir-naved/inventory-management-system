@@ -1,4 +1,4 @@
-.PHONY: start stop restart status logs up down test backup restore prod
+.PHONY: start stop restart status logs up down test backup restore uptime e2e prod rollback
 
 start:
 	./scripts/app.sh start
@@ -25,5 +25,18 @@ test:
 backup:
 	./scripts/backup.sh
 
+restore:
+	@test -n "$(FILE)" || (echo 'Usage: make restore FILE=backups/inventory-….sql.gz'; exit 1)
+	./scripts/restore.sh "$(FILE)"
+
+uptime:
+	./scripts/uptime-check.sh
+
+e2e:
+	./scripts/e2e.sh
+
 prod:
 	./scripts/deploy.sh
+
+rollback:
+	./scripts/rollback.sh

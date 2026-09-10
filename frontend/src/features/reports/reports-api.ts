@@ -136,11 +136,20 @@ export type GstReport = {
   generatedAt: string;
   from: string | null;
   to: string | null;
-  taxableAmount: number;
-  cgstAmount: number;
-  sgstAmount: number;
-  igstAmount: number;
-  totalTax: number;
+  outputTaxableAmount: number;
+  outputCgstAmount: number;
+  outputSgstAmount: number;
+  outputIgstAmount: number;
+  outputTax: number;
+  inputTaxableAmount: number;
+  inputCgstAmount: number;
+  inputSgstAmount: number;
+  inputIgstAmount: number;
+  inputTax: number;
+  netCgstAmount: number;
+  netSgstAmount: number;
+  netIgstAmount: number;
+  netTax: number;
   rows: Array<{
     documentType: string;
     documentNumber: string;

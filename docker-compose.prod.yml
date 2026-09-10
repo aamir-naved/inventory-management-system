@@ -4,22 +4,53 @@
 # Requires .env with SPRING_PROFILES_ACTIVE=prod, APP_JWT_SECRET, SMTP, APP_PUBLIC_APP_URL,
 # APP_PLATFORM_ADMIN_EMAIL, APP_PLATFORM_ADMIN_PASSWORD (when registration is closed),
 # and APP_DOMAIN (public hostname for HTTPS). Postgres and the API are not published on the host.
+#
+# Memory defaults target a ~2 GB VPS. Override *_MEMORY_LIMIT in .env for larger hosts.
+
+x-log-rotation: &log-rotation
+  logging:
+    driver: json-file
+    options:
+      max-size: ${DOCKER_LOG_MAX_SIZE:-10m}
+      max-file: ${DOCKER_LOG_MAX_FILE:-3}
 
 services:
   postgres:
     restart: unless-stopped
     ports: !reset []
+    <<: *log-rotation
+    deploy:
+      resources:
+        limits:
+          memory: ${POSTGRES_MEMORY_LIMIT:-512m}
+        reservations:
+          memory: 256m
 
   backend:
     restart: unless-stopped
     ports: !reset []
+    <<: *log-rotation
     environment:
       SPRING_PROFILES_ACTIVE: prod
       APP_PUBLIC_APP_URL: ${APP_PUBLIC_APP_URL}
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0}
+    deploy:
+      resources:
+        limits:
+          memory: ${BACKEND_MEMORY_LIMIT:-768m}
+        reservations:
+          memory: 384m
 
   frontend:
     restart: unless-stopped
     ports: !reset []
+    <<: *log-rotation
+    deploy:
+      resources:
+        limits:
+          memory: ${FRONTEND_MEMORY_LIMIT:-128m}
+        reservations:
+          memory: 64m
 
   caddy:
     image: caddy:2.8-alpine
@@ -37,6 +68,13 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    <<: *log-rotation
+    deploy:
+      resources:
+        limits:
+          memory: ${CADDY_MEMORY_LIMIT:-128m}
+        reservations:
+          memory: 32m
 
 volumes:
   caddy_data:

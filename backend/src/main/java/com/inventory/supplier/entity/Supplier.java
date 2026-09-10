@@ -21,6 +21,9 @@ public class Supplier extends TenantAwareEntity {
     @Column(name = "address_line", length = 255)
     private String addressLine;
 
+    @Column(name = "state_code", length = 2)
+    private String stateCode;
+
     @Column(name = "archived", nullable = false)
     private boolean archived;
 
@@ -54,6 +57,14 @@ public class Supplier extends TenantAwareEntity {
 
     public void setAddressLine(String addressLine) {
         this.addressLine = addressLine;
+    }
+
+    public String getStateCode() {
+        return stateCode;
+    }
+
+    public void setStateCode(String stateCode) {
+        this.stateCode = stateCode;
     }
 
     public boolean isArchived() {

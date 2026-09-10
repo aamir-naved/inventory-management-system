@@ -885,6 +885,37 @@ a.stat-card--link:focus-visible {
   text-align: center;
 }
 
+.error-boundary {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.error-boundary__panel {
+  max-width: 420px;
+  padding: 28px;
+  text-align: center;
+}
+
+.error-boundary__panel h1 {
+  margin: 0 0 10px;
+  font-size: 1.6rem;
+}
+
+.error-boundary__panel p {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
+.error-boundary__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 22px;
+}
+
 .report-tabs {
   display: flex;
   flex-wrap: wrap;

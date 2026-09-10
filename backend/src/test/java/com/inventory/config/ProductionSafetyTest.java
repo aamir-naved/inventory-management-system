@@ -61,6 +61,31 @@ class ProductionSafetyTest {
     }
 
     @Test
+    void refusesMissingSmsWebhook() {
+        assertThatThrownBy(() -> ProductionSafety.validate(validProdEnvironment().withProperty("app.auth.sms-webhook-url", "")))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("APP_SMS_WEBHOOK_URL");
+    }
+
+    @Test
+    void refusesKnownDevelopmentDbPassword() {
+        assertThatThrownBy(() -> ProductionSafety.validate(
+            validProdEnvironment().withProperty("spring.datasource.password", ProductionSafety.KNOWN_DEV_DB_PASSWORD)
+        ))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("development default");
+    }
+
+    @Test
+    void refusesShortDbPassword() {
+        assertThatThrownBy(() -> ProductionSafety.validate(
+            validProdEnvironment().withProperty("spring.datasource.password", "short-pass")
+        ))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("DB_PASSWORD");
+    }
+
+    @Test
     void acceptsClosedRegistrationWithAdminCredentials() {
         assertThatCode(() -> ProductionSafety.validate(validProdEnvironment()))
             .doesNotThrowAnyException();
@@ -97,8 +122,10 @@ class ProductionSafetyTest {
     private MockEnvironment validProdEnvironment() {
         return new MockEnvironment()
             .withProperty("app.auth.jwt-secret", STRONG_JWT_SECRET)
+            .withProperty("spring.datasource.password", "a-strong-db-password")
             .withProperty("spring.mail.host", "localhost")
             .withProperty("app.auth.public-app-url", "https://shop.example.com")
+            .withProperty("app.auth.sms-webhook-url", "https://sms.example.com/send")
             .withProperty("app.platform.open-registration", "false")
             .withProperty("app.platform.admin-email", "admin@example.com")
             .withProperty("app.platform.admin-password", "a-long-enough-admin-password");

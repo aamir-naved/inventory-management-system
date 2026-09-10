@@ -1,6 +1,7 @@
 package com.inventory.dashboard.service;
 
 import com.inventory.common.tenant.TenantContext;
+import com.inventory.common.time.BusinessClock;
 import com.inventory.dashboard.dto.DashboardMetricsResponse;
 import com.inventory.inventory.dto.InventorySummaryResponse;
 import com.inventory.inventory.service.InventoryService;
@@ -30,24 +31,27 @@ public class DashboardService {
     private final PurchaseRepository purchaseRepository;
     private final SaleReturnRepository saleReturnRepository;
     private final PurchaseReturnRepository purchaseReturnRepository;
+    private final BusinessClock businessClock;
 
     public DashboardService(
         InventoryService inventoryService,
         SaleRepository saleRepository,
         PurchaseRepository purchaseRepository,
         SaleReturnRepository saleReturnRepository,
-        PurchaseReturnRepository purchaseReturnRepository
+        PurchaseReturnRepository purchaseReturnRepository,
+        BusinessClock businessClock
     ) {
         this.inventoryService = inventoryService;
         this.saleRepository = saleRepository;
         this.purchaseRepository = purchaseRepository;
         this.saleReturnRepository = saleReturnRepository;
         this.purchaseReturnRepository = purchaseReturnRepository;
+        this.businessClock = businessClock;
     }
 
     public DashboardMetricsResponse getMetrics() {
         UUID businessId = requireBusinessId();
-        LocalDate today = LocalDate.now();
+        LocalDate today = businessClock.today();
 
         InventorySummaryResponse inventorySummary = inventoryService.getSummary();
         List<Sale> sales = saleRepository.findByBusinessIdAndCancelledFalse(businessId);

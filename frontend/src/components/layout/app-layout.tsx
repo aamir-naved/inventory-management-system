@@ -6,22 +6,26 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/features/auth/auth-context";
 import { canManageCatalog, canManageStaff, canViewReports } from "@/features/auth/roles";
 import { listNotifications } from "@/features/notifications/notification-api";
+import { useLocale } from "@/i18n/locale-context";
+import type { MessageKey } from "@/i18n/messages";
 
 type NavItem = {
   to: string;
-  label: string;
-  detail: string;
+  labelKey: MessageKey;
+  detailKey: MessageKey;
   visible: boolean;
 };
 
 export function AppLayout() {
   const { session, logout, resendVerification } = useAuth();
+  const { locale, setLocale, t } = useLocale();
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
   const [isResending, setIsResending] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const role = session?.role;
   const businessId = session?.businessId ?? null;
+  const firstName = session?.fullName?.split(" ")[0] ?? "there";
 
   const notificationsQuery = useQuery({
     queryKey: ["notifications", businessId],
@@ -34,27 +38,72 @@ export function AppLayout() {
     () => {
       if (!businessId) {
         return [
-          { to: "/welcome", label: "Start", detail: "Shop name", visible: true },
-          { to: "/business-setup", label: "Full setup", detail: "GST later", visible: canManageCatalog(role) },
-          { to: "/profile", label: "Profile", detail: "Account", visible: true },
+          { to: "/welcome", labelKey: "nav.start", detailKey: "nav.detail.shopName", visible: true },
+          {
+            to: "/business-setup",
+            labelKey: "nav.fullSetup",
+            detailKey: "nav.detail.gstLater",
+            visible: canManageCatalog(role),
+          },
+          { to: "/profile", labelKey: "nav.profile", detailKey: "nav.detail.account", visible: true },
         ];
       }
 
       return [
-        { to: "/pos", label: "Counter", detail: "Barcode sale", visible: true },
-        { to: "/sales", label: "Sales", detail: "Invoices", visible: true },
-        { to: "/customers", label: "Customers", detail: "Parties", visible: true },
-        { to: "/dashboard", label: "Dashboard", detail: "Quick pulse", visible: true },
-        { to: "/products", label: "Products", detail: "Catalog", visible: canManageCatalog(role) },
-        { to: "/inventory", label: "Inventory", detail: "Stock", visible: true },
-        { to: "/purchases", label: "Purchases", detail: "Bills", visible: canManageCatalog(role) },
-        { to: "/suppliers", label: "Suppliers", detail: "Parties", visible: canManageCatalog(role) },
-        { to: "/reports", label: "Reports", detail: "Insights", visible: canViewReports(role) },
-        { to: "/team", label: "Team", detail: "Staff", visible: canManageStaff(role) || canViewReports(role) },
-        { to: "/audit", label: "Activity", detail: "Log", visible: canViewReports(role) },
-        { to: "/business-setup", label: "Business", detail: "Workspace", visible: canManageCatalog(role) },
-        { to: "/settings", label: "Settings", detail: "Prefs", visible: canManageCatalog(role) },
-        { to: "/profile", label: "Profile", detail: "Account", visible: true },
+        { to: "/pos", labelKey: "nav.counter", detailKey: "nav.detail.barcodeSale", visible: true },
+        { to: "/sales", labelKey: "nav.sales", detailKey: "nav.detail.invoices", visible: true },
+        { to: "/customers", labelKey: "nav.customers", detailKey: "nav.detail.parties", visible: true },
+        { to: "/dashboard", labelKey: "nav.dashboard", detailKey: "nav.detail.pulse", visible: true },
+        {
+          to: "/products",
+          labelKey: "nav.products",
+          detailKey: "nav.detail.catalog",
+          visible: canManageCatalog(role),
+        },
+        { to: "/inventory", labelKey: "nav.inventory", detailKey: "nav.detail.stock", visible: true },
+        {
+          to: "/purchases",
+          labelKey: "nav.purchases",
+          detailKey: "nav.detail.bills",
+          visible: canManageCatalog(role),
+        },
+        {
+          to: "/suppliers",
+          labelKey: "nav.suppliers",
+          detailKey: "nav.detail.parties",
+          visible: canManageCatalog(role),
+        },
+        {
+          to: "/reports",
+          labelKey: "nav.reports",
+          detailKey: "nav.detail.insights",
+          visible: canViewReports(role),
+        },
+        {
+          to: "/team",
+          labelKey: "nav.team",
+          detailKey: "nav.detail.staff",
+          visible: canManageStaff(role) || canViewReports(role),
+        },
+        {
+          to: "/audit",
+          labelKey: "nav.audit",
+          detailKey: "nav.detail.log",
+          visible: canViewReports(role),
+        },
+        {
+          to: "/business-setup",
+          labelKey: "nav.business",
+          detailKey: "nav.detail.workspace",
+          visible: canManageCatalog(role),
+        },
+        {
+          to: "/settings",
+          labelKey: "nav.settings",
+          detailKey: "nav.detail.prefs",
+          visible: canManageCatalog(role),
+        },
+        { to: "/profile", labelKey: "nav.profile", detailKey: "nav.detail.account", visible: true },
       ];
     },
     [role, businessId],
@@ -81,25 +130,22 @@ export function AppLayout() {
         aria-expanded={menuOpen}
         onClick={() => setMenuOpen((open) => !open)}
       >
-        {menuOpen ? "Close menu" : "Menu"}
+        {menuOpen ? t("shell.closeMenu") : t("shell.menu")}
       </button>
       {menuOpen ? (
         <button
           type="button"
           className="nav-backdrop"
-          aria-label="Close menu"
+          aria-label={t("shell.closeMenu")}
           onClick={() => setMenuOpen(false)}
         />
       ) : null}
 
       <aside className={`sidebar${menuOpen ? " sidebar--open" : ""}`}>
         <div className="sidebar__brand">
-          <span className="brand-kicker">Inventory for your shop</span>
-          <h1>Bill from the counter. Stock stays on the server.</h1>
-          <p>
-            Open this link on a phone. Sales, stock, and invoices live in the cloud — not on
-            a shop PC that can be lost.
-          </p>
+          <span className="brand-kicker">{t("shell.brandKicker")}</span>
+          <h1>{t("shell.brandTitle")}</h1>
+          <p>{t("shell.brandBody")}</p>
         </div>
 
         <nav className="nav-group" aria-label="Primary navigation">
@@ -114,14 +160,25 @@ export function AppLayout() {
                   `nav-link${isActive ? " nav-link--active" : ""}`
                 }
               >
-                <span>{item.label}</span>
-                <small>{item.detail}</small>
+                <span>{t(item.labelKey)}</span>
+                <small>{t(item.detailKey)}</small>
               </NavLink>
             ))}
         </nav>
 
         <div className="sidebar__footer">
-          <strong>{session?.businessName ?? "No business configured yet"}</strong>
+          <label className="field" htmlFor="app-locale">
+            <span className="inline-note">{t("shell.language")}</span>
+            <select
+              id="app-locale"
+              value={locale}
+              onChange={(event) => setLocale(event.target.value === "hi" ? "hi" : "en")}
+            >
+              <option value="en">English</option>
+              <option value="hi">हिन्दी</option>
+            </select>
+          </label>
+          <strong>{session?.businessName ?? t("shell.noBusiness")}</strong>
           <p>
             {session?.role ? `${session.role.toLowerCase()} access.` : "Active business for this session."}
           </p>
@@ -131,8 +188,8 @@ export function AppLayout() {
       <div className="content-area">
         <header className="topbar">
           <div className="topbar__title">
-            <h2>Welcome back, {session?.fullName?.split(" ")[0] ?? "there"}</h2>
-            <p>Sell first. Numbers and GST can wait until after the bill.</p>
+            <h2>{t("shell.welcome", { name: firstName })}</h2>
+            <p>{t("shell.tagline")}</p>
           </div>
 
           <div className="topbar__meta">
@@ -141,10 +198,10 @@ export function AppLayout() {
               className="ghost-button"
               onClick={() => setNotesOpen((open) => !open)}
             >
-              Alerts ({notificationsQuery.data?.count ?? 0})
+              {t("shell.alerts", { count: notificationsQuery.data?.count ?? 0 })}
             </button>
             <span className="badge">
-              {session?.businessId ? "Business ready" : "Setup pending"}
+              {session?.businessId ? t("shell.businessReady") : t("shell.setupPending")}
             </span>
             <button
               type="button"
@@ -153,7 +210,7 @@ export function AppLayout() {
                 void logout();
               }}
             >
-              Sign out
+              {t("shell.signOut")}
             </button>
           </div>
         </header>

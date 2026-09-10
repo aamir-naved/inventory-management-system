@@ -35,6 +35,7 @@ export function useBusinessSettings() {
     allowNegativeStock,
     gstEnabled: settingsQuery.data?.gstEnabled ?? false,
     gstInclusivePricing: settingsQuery.data?.gstInclusivePricing ?? false,
+    stateCode: settingsQuery.data?.stateCode ?? null,
     formatMoney: (value: number | undefined | null) =>
       formatMoney(value, currencyCode),
     formatDate: (value: string | Date | null | undefined) =>

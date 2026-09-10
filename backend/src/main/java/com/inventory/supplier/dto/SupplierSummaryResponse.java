@@ -11,6 +11,7 @@ public record SupplierSummaryResponse(
     String contactPerson,
     String mobileNumber,
     String addressLine,
+    String stateCode,
     boolean archived,
     long billCount,
     BigDecimal billedAmount,

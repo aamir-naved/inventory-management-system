@@ -120,7 +120,7 @@ public class AuthService {
         userAccount.setPasswordHash(passwordEncoder.encode(request.password()));
         userAccountRepository.save(userAccount);
         authTokenService.markUsed(authToken);
-        authTokenService.revokeRefreshTokens(userAccount.getId());
+        authTokenService.revokeSessions(userAccount);
         return new MessageResponse("Password has been reset. You can sign in with your new password.");
     }
 
@@ -155,12 +155,7 @@ public class AuthService {
     }
 
     public MessageResponse logout(LogoutRequest request) {
-        UUID userId = currentUser.requireUserId();
-        if (request != null && StringUtils.hasText(request.refreshToken())) {
-            authTokenService.revokeRefreshToken(request.refreshToken());
-        } else {
-            authTokenService.revokeRefreshTokens(userId);
-        }
+        authTokenService.revokeSessions(requireCurrentUser());
         return new MessageResponse("Signed out.");
     }
 
@@ -180,7 +175,7 @@ public class AuthService {
         userAccountRepository.saveAndFlush(userAccount);
 
         if (changingPassword) {
-            authTokenService.revokeRefreshTokens(userAccount.getId());
+            authTokenService.revokeSessions(userAccount);
         }
 
         return buildAuthResponse(userAccount, changingPassword);
@@ -231,7 +226,8 @@ public class AuthService {
     private AuthResponse buildAuthResponse(UserAccount userAccount, boolean includeRefreshToken) {
         JwtService.JwtToken accessToken = jwtService.issueToken(
             userAccount.getId(),
-            userAccount.getEmail() != null ? userAccount.getEmail() : userAccount.getPhone()
+            userAccount.getEmail() != null ? userAccount.getEmail() : userAccount.getPhone(),
+            userAccount.getTokenVersion()
         );
         boolean platformAdmin = userAccount.isPlatformAdmin();
         Optional<BusinessMembership> activeMembership = platformAdmin

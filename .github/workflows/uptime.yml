@@ -1,0 +1,47 @@
+name: Uptime
+
+# External watchdog: runs on GitHub's runners, not on the shop VPS.
+# Enable by adding repository secrets (Settings → Secrets and variables → Actions):
+#   HEALTH_CHECK_URL          https://your-shop.example.com/api/actuator/health
+#   UPTIME_ALERT_PHONE        +91XXXXXXXXXX
+#   APP_SMS_WEBHOOK_URL       same webhook the app uses for OTP SMS
+# Optional:
+#   UPTIME_ALERT_WEBHOOK_URL  generic POST {status,message,url}
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    name: Health probe
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect configuration
+        id: config
+        env:
+          HEALTH_CHECK_URL: ${{ secrets.HEALTH_CHECK_URL }}
+        run: |
+          if [[ -z "${HEALTH_CHECK_URL}" ]]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "HEALTH_CHECK_URL secret not set — skipping (configure secrets to enable)."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check shop health and alert phone on failure
+        if: steps.config.outputs.configured == 'true'
+        env:
+          HEALTH_CHECK_URL: ${{ secrets.HEALTH_CHECK_URL }}
+          UPTIME_ALERT_PHONE: ${{ secrets.UPTIME_ALERT_PHONE }}
+          APP_SMS_WEBHOOK_URL: ${{ secrets.APP_SMS_WEBHOOK_URL }}
+          UPTIME_ALERT_WEBHOOK_URL: ${{ secrets.UPTIME_ALERT_WEBHOOK_URL }}
+          # No durable state between Actions runs; alert on first failure.
+          UPTIME_FAILURES_BEFORE_ALERT: "1"
+          UPTIME_STATE_DIR: ${{ runner.temp }}/ims-uptime
+        run: |
+          chmod +x ./scripts/uptime-check.sh
+          ./scripts/uptime-check.sh

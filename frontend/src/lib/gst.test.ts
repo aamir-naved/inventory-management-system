@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeGstLine } from "@/lib/gst";
+import { computeGstLine, isInterstateSupply } from "@/lib/gst";
 import { canManageCatalog, canOpenPath, normalizeRole } from "@/features/auth/roles";
 import { afterAuthPath, type SessionUser } from "@/features/auth/auth-storage";
 
@@ -18,6 +18,15 @@ describe("computeGstLine", () => {
     expect(line.igstAmount).toBe(18);
     expect(line.cgstAmount).toBe(0);
     expect(line.lineTotal).toBe(118);
+  });
+});
+
+describe("isInterstateSupply", () => {
+  it("is true only when both states exist and differ", () => {
+    expect(isInterstateSupply("29", "27")).toBe(true);
+    expect(isInterstateSupply("29", "29")).toBe(false);
+    expect(isInterstateSupply("29", null)).toBe(false);
+    expect(isInterstateSupply(null, "27")).toBe(false);
   });
 });
 

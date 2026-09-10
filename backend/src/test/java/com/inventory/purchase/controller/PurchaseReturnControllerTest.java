@@ -61,7 +61,7 @@ class PurchaseReturnControllerTest extends AuthenticatedControllerTestSupport {
                     """.formatted(purchaseItemId)))
             .andExpect(status().isCreated())
             .andExpect(header().string("Location", containsString("/purchases/returns/")))
-            .andExpect(jsonPath("$.returnNumber").value(containsString("PRT-")))
+            .andExpect(jsonPath("$.returnNumber").value(containsString("PRT/")))
             .andExpect(jsonPath("$.totalAmount").value(3150.0))
             .andExpect(jsonPath("$.items.length()").value(1));
 

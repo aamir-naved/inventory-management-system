@@ -14,7 +14,6 @@ export function PlatformShopDetailPage() {
   const queryClient = useQueryClient();
   const [reason, setReason] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [password, setPassword] = useState<string | null>(null);
 
   const shopQuery = useQuery({
     queryKey: ["platform-shop", id],
@@ -32,7 +31,6 @@ export function PlatformShopDetailPage() {
       }),
     onSuccess: (updated) => {
       setFeedback(updated.active ? "Shop is active." : "Shop is suspended.");
-      setPassword(null);
       void queryClient.invalidateQueries({ queryKey: ["platform-shop", id] });
       void queryClient.invalidateQueries({ queryKey: ["platform-shops"] });
       void queryClient.invalidateQueries({ queryKey: ["platform-stats"] });
@@ -45,8 +43,7 @@ export function PlatformShopDetailPage() {
   const resetMutation = useMutation({
     mutationFn: () => resetPlatformOwnerPassword(id!),
     onSuccess: (result) => {
-      setPassword(result.temporaryPassword);
-      setFeedback("Owner password reset. Copy it now; it is not shown again.");
+      setFeedback(result.message);
     },
     onError: (error) => {
       setFeedback(error instanceof ApiError ? error.message : "Unable to reset the password.");
@@ -94,11 +91,6 @@ export function PlatformShopDetailPage() {
             </div>
           )}
           {feedback ? <p className="inline-note">{feedback}</p> : null}
-          {password ? (
-            <p className="inline-note">
-              Temporary password: <strong>{password}</strong>
-            </p>
-          ) : null}
           <div className="product-card__actions">
             {shop.active ? (
               <button

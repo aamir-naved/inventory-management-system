@@ -73,6 +73,11 @@ public class SettingsService {
         return findCurrentBusiness().isGstInclusivePricing();
     }
 
+    @Transactional(readOnly = true)
+    public String getStateCode() {
+        return findCurrentBusiness().getStateCode();
+    }
+
     private Business findCurrentBusiness() {
         UUID businessId = TenantContext.getBusinessId()
             .orElseThrow(() -> new IllegalStateException("Business context is required"));

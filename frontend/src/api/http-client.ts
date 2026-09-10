@@ -1,9 +1,6 @@
 import { appConfig } from "@/app/config";
-import {
-  clearStoredAuthSession,
-  readStoredAuthSession,
-  writeStoredAuthSession,
-} from "@/features/auth/auth-storage";
+import { expireAuthSession, refreshSessionOnce } from "@/api/auth-session";
+import { readStoredAuthSession } from "@/features/auth/auth-storage";
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -31,8 +28,6 @@ type RequestOptions = {
 function isFormData(body: unknown): body is FormData {
   return typeof FormData !== "undefined" && body instanceof FormData;
 }
-
-let refreshPromise: Promise<boolean> | null = null;
 
 async function parseResponse(response: Response) {
   const contentType = response.headers.get("content-type") ?? "";
@@ -67,70 +62,6 @@ function extractErrorMessage(payload: unknown): string {
   }
 
   return "Request failed";
-}
-
-async function tryRefreshSession(): Promise<boolean> {
-  const session = readStoredAuthSession();
-  if (!session?.refreshToken) {
-    return false;
-  }
-
-  try {
-    const response = await fetch(`${appConfig.apiBaseUrl}/auth/refresh`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ refreshToken: session.refreshToken }),
-    });
-
-    const payload = await parseResponse(response);
-    if (!response.ok) {
-      clearStoredAuthSession();
-      return false;
-    }
-
-    const authPayload = payload as {
-      accessToken: string;
-      tokenType: string;
-      expiresAt: string;
-      refreshToken?: string | null;
-      refreshExpiresAt?: string | null;
-      user: typeof session.user;
-    };
-
-    writeStoredAuthSession({
-      accessToken: authPayload.accessToken,
-      tokenType: authPayload.tokenType,
-      expiresAt: authPayload.expiresAt,
-      refreshToken: authPayload.refreshToken ?? null,
-      refreshExpiresAt: authPayload.refreshExpiresAt ?? null,
-      user: {
-        ...authPayload.user,
-        emailVerified: Boolean(authPayload.user.emailVerified),
-        platformRole: authPayload.user.platformRole === "PLATFORM_ADMIN" ? "PLATFORM_ADMIN" : null,
-        role:
-          authPayload.user.platformRole === "PLATFORM_ADMIN"
-            ? null
-            : authPayload.user.role ?? session.user.role ?? null,
-      },
-    });
-
-    return true;
-  } catch {
-    clearStoredAuthSession();
-    return false;
-  }
-}
-
-async function refreshSessionOnce() {
-  if (!refreshPromise) {
-    refreshPromise = tryRefreshSession().finally(() => {
-      refreshPromise = null;
-    });
-  }
-
-  return refreshPromise;
 }
 
 export async function httpClient<T>(
@@ -176,6 +107,7 @@ export async function httpClient<T>(
         skipAuthRefresh: true,
       });
     }
+    expireAuthSession();
   }
 
   if (response.status === 204) {

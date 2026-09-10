@@ -13,7 +13,6 @@ export type SalePayload = {
   saleDate: string;
   amountPaid: number;
   notes: string;
-  interstate?: boolean;
   items: SaleItemPayload[];
 };
 
@@ -115,11 +114,16 @@ export async function listSales(businessId: string, search?: string, paging: Pag
   });
 }
 
-export async function createSale(businessId: string, payload: SalePayload) {
+export async function createSale(
+  businessId: string,
+  payload: SalePayload,
+  idempotencyKey?: string,
+) {
   return httpClient<SaleRecord>("/sales", {
     method: "POST",
     businessId,
     body: payload,
+    headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
   });
 }
 

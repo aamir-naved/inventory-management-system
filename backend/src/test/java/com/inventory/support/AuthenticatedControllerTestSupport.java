@@ -74,6 +74,10 @@ public abstract class AuthenticatedControllerTestSupport {
     }
 
     protected String authorizationHeader(UserAccount userAccount) {
-        return "Bearer " + jwtService.issueToken(userAccount.getId(), userAccount.getEmail()).value();
+        return "Bearer " + jwtService.issueToken(
+            userAccount.getId(),
+            userAccount.getEmail(),
+            userAccount.getTokenVersion()
+        ).value();
     }
 }

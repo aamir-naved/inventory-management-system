@@ -12,6 +12,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.UUID;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -40,7 +41,7 @@ class DashboardControllerTest extends AuthenticatedControllerTestSupport {
 
     @Test
     void returnsLiveDashboardMetrics() throws Exception {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Kolkata"));
         LocalDate yesterday = today.minusDays(1);
 
         createProduct("Low Stock Screws", "SCR-001", 10.000, 40.000);
@@ -81,6 +82,33 @@ class DashboardControllerTest extends AuthenticatedControllerTestSupport {
             .andExpect(jsonPath("$.lowStockProducts").value(1))
             .andExpect(jsonPath("$.outstandingCustomers").value(1300.0))
             .andExpect(jsonPath("$.outstandingSuppliers").value(3150.0));
+    }
+
+    @Test
+    void dashboardAsOfDateUsesBusinessTimezone() throws Exception {
+        mockMvc.perform(patch("/businesses/{id}", businessId)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "name":"Timezone Shop",
+                      "businessType":"Retail",
+                      "mobileNumber":"+91 9000000000",
+                      "addressLine":"Main Road",
+                      "currencyCode":"INR",
+                      "timeZone":"UTC"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.timeZone").value("UTC"));
+
+        LocalDate utcToday = LocalDate.now(ZoneId.of("UTC"));
+        mockMvc.perform(get("/dashboard/metrics")
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.asOfDate").value(utcToday.toString()));
     }
 
     @Test

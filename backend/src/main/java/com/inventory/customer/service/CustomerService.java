@@ -108,6 +108,7 @@ public class CustomerService {
             customer.getContactPerson(),
             customer.getMobileNumber(),
             customer.getAddressLine(),
+            customer.getStateCode(),
             customer.isArchived(),
             invoiceCount,
             netBilled,
@@ -154,6 +155,7 @@ public class CustomerService {
         customer.setContactPerson(normalize(request.contactPerson()));
         customer.setMobileNumber(normalize(request.mobileNumber()));
         customer.setAddressLine(normalize(request.addressLine()));
+        customer.setStateCode(normalizeStateCode(request.stateCode()));
     }
 
     private UUID requireBusinessId() {
@@ -169,6 +171,11 @@ public class CustomerService {
         return normalized.isEmpty() ? null : normalized;
     }
 
+    private String normalizeStateCode(String value) {
+        String normalized = normalize(value);
+        return normalized == null ? null : normalized.toUpperCase();
+    }
+
     private String normalizeSearch(String value) {
         String normalized = normalize(value);
         return normalized == null ? "" : normalized;
@@ -182,6 +189,7 @@ public class CustomerService {
             customer.getContactPerson(),
             customer.getMobileNumber(),
             customer.getAddressLine(),
+            customer.getStateCode(),
             customer.isArchived(),
             customer.getCreatedAt(),
             customer.getUpdatedAt()

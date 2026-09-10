@@ -32,6 +32,12 @@ public class SaleItem extends AuditableEntity {
     @Column(name = "line_total", nullable = false, precision = 19, scale = 2)
     private BigDecimal lineTotal;
 
+    @Column(name = "product_name", nullable = false, length = 150)
+    private String productName;
+
+    @Column(name = "unit", nullable = false, length = 30)
+    private String unit;
+
     @Column(name = "hsn_code", length = 8)
     private String hsnCode;
 
@@ -60,6 +66,10 @@ public class SaleItem extends AuditableEntity {
     public void setUnitPrice(BigDecimal unitPrice) { this.unitPrice = unitPrice; }
     public BigDecimal getLineTotal() { return lineTotal; }
     public void setLineTotal(BigDecimal lineTotal) { this.lineTotal = lineTotal; }
+    public String getProductName() { return productName; }
+    public void setProductName(String productName) { this.productName = productName; }
+    public String getUnit() { return unit; }
+    public void setUnit(String unit) { this.unit = unit; }
     public String getHsnCode() { return hsnCode; }
     public void setHsnCode(String hsnCode) { this.hsnCode = hsnCode; }
     public BigDecimal getGstRate() { return gstRate; }

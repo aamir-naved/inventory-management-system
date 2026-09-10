@@ -12,7 +12,7 @@ import { EntityPicker } from "@/components/ui/entity-picker";
 import { FieldInfo, FieldLabel } from "@/components/ui/field-label";
 import { PaginationBar } from "@/components/ui/pagination-bar";
 import { useAuth } from "@/features/auth/auth-context";
-import { computeGstLine } from "@/lib/gst";
+import { computeGstLine, isInterstateSupply } from "@/lib/gst";
 import { useBusinessSettings } from "@/features/settings/use-business-settings";
 import {
   parseNumericDraft,
@@ -60,7 +60,6 @@ type PurchaseFormState = {
   purchaseDate: string;
   amountPaid: NumericDraft;
   notes: string;
-  interstate: boolean;
   items: PurchaseItemDraft[];
 };
 
@@ -69,6 +68,7 @@ const initialSupplier: SupplierPayload = {
   contactPerson: "",
   mobileNumber: "",
   addressLine: "",
+  stateCode: "",
 };
 
 const initialPurchase: PurchaseFormState = {
@@ -76,7 +76,6 @@ const initialPurchase: PurchaseFormState = {
   purchaseDate: new Date().toISOString().slice(0, 10),
   amountPaid: "",
   notes: "",
-  interstate: false,
   items: [],
 };
 
@@ -132,7 +131,6 @@ function toPurchasePayload(form: PurchaseFormState): PurchasePayload {
     purchaseDate: form.purchaseDate,
     amountPaid: resolveNumericDraft(form.amountPaid),
     notes: form.notes,
-    interstate: form.interstate,
     items: form.items.map((item) => ({
       productId: item.productId,
       quantity: resolveNumericDraft(item.quantity),
@@ -146,7 +144,8 @@ export function PurchasesPage() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const businessId = session?.businessId ?? null;
-  const { formatMoney, formatDate, gstEnabled, gstInclusivePricing } = useBusinessSettings();
+  const { formatMoney, formatDate, gstEnabled, gstInclusivePricing, stateCode: businessStateCode } =
+    useBusinessSettings();
   const [supplierForm, setSupplierForm] = useState<SupplierPayload>(initialSupplier);
   const [purchaseForm, setPurchaseForm] = useState<PurchaseFormState>(initialPurchase);
   const [purchaseSearch, setPurchaseSearch] = useState("");
@@ -392,15 +391,21 @@ export function PurchasesPage() {
     setFeedback("Request failed.");
   }
 
+  const purchaseInterstate = isInterstateSupply(
+    businessStateCode,
+    suppliersQuery.data?.items.find((supplier) => supplier.id === purchaseForm.supplierId)
+      ?.stateCode,
+  );
+
   const purchaseTotal = useMemo(
     () =>
       summarizeTotal(
         purchaseForm.items,
         gstEnabled,
         gstInclusivePricing,
-        purchaseForm.interstate,
+        purchaseInterstate,
       ),
-    [purchaseForm.items, purchaseForm.interstate, gstEnabled, gstInclusivePricing],
+    [purchaseForm.items, purchaseInterstate, gstEnabled, gstInclusivePricing],
   );
   const amountPaidNow = resolveNumericDraft(purchaseForm.amountPaid);
   const outstandingAfterSave = Math.max(purchaseTotal - amountPaidNow, 0);
@@ -601,6 +606,22 @@ export function PurchasesPage() {
               />
             </div>
 
+            <div className="field">
+              <label htmlFor="supplier-state-code">State code</label>
+              <input
+                id="supplier-state-code"
+                value={supplierForm.stateCode}
+                maxLength={2}
+                onChange={(event) =>
+                  setSupplierForm((current) => ({
+                    ...current,
+                    stateCode: event.target.value.toUpperCase(),
+                  }))
+                }
+                placeholder="29"
+              />
+            </div>
+
             <button type="submit" className="ghost-button" disabled={supplierMutation.isPending}>
               {supplierMutation.isPending ? "Creating supplier..." : "Create supplier"}
             </button>
@@ -690,19 +711,11 @@ export function PurchasesPage() {
             </div>
 
             {gstEnabled ? (
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={purchaseForm.interstate}
-                  onChange={(event) =>
-                    setPurchaseForm((current) => ({
-                      ...current,
-                      interstate: event.target.checked,
-                    }))
-                  }
-                />
-                <span>Interstate purchase (IGST)</span>
-              </label>
+              <p className="inline-note">
+                {purchaseInterstate
+                  ? "Interstate (IGST) — supplier state differs from business state."
+                  : "Intrastate (CGST/SGST) — based on supplier and business state codes."}
+              </p>
             ) : null}
 
             <div className="split-grid">
@@ -1182,10 +1195,14 @@ export function PurchasesPage() {
                     {purchasePaymentsQuery.data.map((payment) => (
                       <div key={payment.id} className="list-row">
                         <span>
+                          {payment.paymentKind === "REFUND" ? "Refund · " : ""}
                           {payment.paymentDate}
                           {payment.notes ? ` · ${payment.notes}` : ""}
                         </span>
-                        <span>{formatMoney(payment.amount)}</span>
+                        <span>
+                          {payment.paymentKind === "REFUND" ? "−" : ""}
+                          {formatMoney(payment.amount)}
+                        </span>
                       </div>
                     ))}
                   </div>

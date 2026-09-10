@@ -46,12 +46,12 @@ public class PaymentService {
     }
 
     public PaymentResponse createForSale(UUID saleId, PaymentRequest request) {
-        Sale sale = findSale(saleId);
+        Sale sale = findSaleForUpdate(saleId);
         return toResponse(recordSalePayment(sale, request.amount(), request.paymentDate(), request.notes()));
     }
 
     public PaymentResponse createForPurchase(UUID purchaseId, PaymentRequest request) {
-        Purchase purchase = findPurchase(purchaseId);
+        Purchase purchase = findPurchaseForUpdate(purchaseId);
         return toResponse(recordPurchasePayment(
             purchase,
             request.amount(),
@@ -82,6 +82,7 @@ public class PaymentService {
         payment.setDocumentId(sale.getId());
         payment.setPaymentDate(paymentDate);
         payment.setAmount(paymentAmount);
+        payment.setPaymentKind(Payment.KIND_RECEIPT);
         payment.setNotes(normalize(notes));
         Payment saved = paymentRepository.save(payment);
 
@@ -117,12 +118,63 @@ public class PaymentService {
         payment.setDocumentId(purchase.getId());
         payment.setPaymentDate(paymentDate);
         payment.setAmount(paymentAmount);
+        payment.setPaymentKind(Payment.KIND_RECEIPT);
         payment.setNotes(normalize(notes));
         Payment saved = paymentRepository.save(payment);
 
         purchase.setAmountPaid(nextPaid);
         purchase.setPaymentStatus(PaymentAmounts.deriveStatus(nextPaid, billable));
         return saved;
+    }
+
+    /** Writes a refund trail and clears denormalized paid amount when a sale is cancelled. */
+    public void reversePaymentsForCancelledSale(Sale sale, LocalDate refundDate, String notes) {
+        BigDecimal paid = nullSafe(sale.getAmountPaid());
+        if (paid.compareTo(BigDecimal.ZERO) <= 0) {
+            sale.setAmountPaid(BigDecimal.ZERO);
+            sale.setPaymentStatus(PaymentAmounts.STATUS_PENDING);
+            return;
+        }
+
+        Payment refund = new Payment();
+        refund.setBusinessId(sale.getBusinessId());
+        refund.setPartyType(Payment.PARTY_CUSTOMER);
+        refund.setPartyId(sale.getCustomer().getId());
+        refund.setDocumentType(Payment.DOCUMENT_SALE);
+        refund.setDocumentId(sale.getId());
+        refund.setPaymentDate(refundDate);
+        refund.setAmount(paid);
+        refund.setPaymentKind(Payment.KIND_REFUND);
+        refund.setNotes(normalize(notes));
+        paymentRepository.save(refund);
+
+        sale.setAmountPaid(BigDecimal.ZERO);
+        sale.setPaymentStatus(PaymentAmounts.STATUS_PENDING);
+    }
+
+    /** Writes a refund trail and clears denormalized paid amount when a purchase is cancelled. */
+    public void reversePaymentsForCancelledPurchase(Purchase purchase, LocalDate refundDate, String notes) {
+        BigDecimal paid = nullSafe(purchase.getAmountPaid());
+        if (paid.compareTo(BigDecimal.ZERO) <= 0) {
+            purchase.setAmountPaid(BigDecimal.ZERO);
+            purchase.setPaymentStatus(PaymentAmounts.STATUS_PENDING);
+            return;
+        }
+
+        Payment refund = new Payment();
+        refund.setBusinessId(purchase.getBusinessId());
+        refund.setPartyType(Payment.PARTY_SUPPLIER);
+        refund.setPartyId(purchase.getSupplier().getId());
+        refund.setDocumentType(Payment.DOCUMENT_PURCHASE);
+        refund.setDocumentId(purchase.getId());
+        refund.setPaymentDate(refundDate);
+        refund.setAmount(paid);
+        refund.setPaymentKind(Payment.KIND_REFUND);
+        refund.setNotes(normalize(notes));
+        paymentRepository.save(refund);
+
+        purchase.setAmountPaid(BigDecimal.ZERO);
+        purchase.setPaymentStatus(PaymentAmounts.STATUS_PENDING);
     }
 
     public void syncSalePaymentStatus(Sale sale) {
@@ -186,8 +238,18 @@ public class PaymentService {
             .orElseThrow(() -> new EntityNotFoundException("Sale not found"));
     }
 
+    private Sale findSaleForUpdate(UUID saleId) {
+        return saleRepository.findByIdAndBusinessIdForUpdate(saleId, requireBusinessId())
+            .orElseThrow(() -> new EntityNotFoundException("Sale not found"));
+    }
+
     private Purchase findPurchase(UUID purchaseId) {
         return purchaseRepository.findByIdAndBusinessId(purchaseId, requireBusinessId())
+            .orElseThrow(() -> new EntityNotFoundException("Purchase not found"));
+    }
+
+    private Purchase findPurchaseForUpdate(UUID purchaseId) {
+        return purchaseRepository.findByIdAndBusinessIdForUpdate(purchaseId, requireBusinessId())
             .orElseThrow(() -> new EntityNotFoundException("Purchase not found"));
     }
 
@@ -225,6 +287,7 @@ public class PaymentService {
             payment.getDocumentId(),
             payment.getPaymentDate(),
             payment.getAmount(),
+            payment.getPaymentKind() == null ? Payment.KIND_RECEIPT : payment.getPaymentKind(),
             payment.getNotes(),
             payment.getCreatedAt(),
             payment.getUpdatedAt()

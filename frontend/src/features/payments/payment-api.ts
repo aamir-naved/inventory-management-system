@@ -15,6 +15,7 @@ export type PaymentRecord = {
   documentId: string;
   paymentDate: string;
   amount: number;
+  paymentKind: "RECEIPT" | "REFUND";
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -30,11 +31,13 @@ export async function createSalePayment(
   businessId: string,
   saleId: string,
   payload: PaymentPayload,
+  idempotencyKey?: string,
 ) {
   return httpClient<PaymentRecord>(`/sales/${saleId}/payments`, {
     method: "POST",
     businessId,
     body: payload,
+    headers: idempotencyKey ? { "Idempotency-Key": idempotencyKey } : undefined,
   });
 }
 

@@ -178,6 +178,7 @@ public class StaffService {
             throw new IllegalArgumentException("You cannot remove your own access");
         }
         membership.setActive(false);
+        authTokenService.revokeSessions(membership.getUser());
         auditService.record(
             "STAFF_DEACTIVATED",
             "STAFF",
@@ -239,7 +240,11 @@ public class StaffService {
         invite.setAcceptedAt(OffsetDateTime.now(ZoneOffset.UTC));
         staffInviteRepository.save(invite);
 
-        JwtService.JwtToken accessToken = jwtService.issueToken(user.getId(), user.getEmail());
+        JwtService.JwtToken accessToken = jwtService.issueToken(
+            user.getId(),
+            user.getEmail(),
+            user.getTokenVersion()
+        );
         AuthTokenService.IssuedToken refresh = authTokenService.issueToken(user, AuthTokenType.REFRESH);
         return new AuthResponse(
             accessToken.value(),

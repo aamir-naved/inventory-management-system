@@ -2,6 +2,7 @@ import {
   useDeferredValue,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -12,7 +13,8 @@ import { EntityPicker } from "@/components/ui/entity-picker";
 import { FieldInfo, FieldLabel } from "@/components/ui/field-label";
 import { PaginationBar } from "@/components/ui/pagination-bar";
 import { useAuth } from "@/features/auth/auth-context";
-import { computeGstLine } from "@/lib/gst";
+import { computeGstLine, isInterstateSupply } from "@/lib/gst";
+import { newIdempotencyKey } from "@/lib/idempotency";
 import { useBusinessSettings } from "@/features/settings/use-business-settings";
 import {
   createCustomer,
@@ -61,7 +63,6 @@ type SaleFormState = {
   saleDate: string;
   amountPaid: NumericDraft;
   notes: string;
-  interstate: boolean;
   items: SaleItemDraft[];
 };
 
@@ -83,6 +84,7 @@ const initialCustomer: CustomerPayload = {
   contactPerson: "",
   mobileNumber: "",
   addressLine: "",
+  stateCode: "",
 };
 
 const initialSale: SaleFormState = {
@@ -90,7 +92,6 @@ const initialSale: SaleFormState = {
   saleDate: new Date().toISOString().slice(0, 10),
   amountPaid: "",
   notes: "",
-  interstate: false,
   items: [],
 };
 
@@ -133,7 +134,6 @@ function toSalePayload(form: SaleFormState): SalePayload {
     saleDate: form.saleDate,
     amountPaid: resolveNumericDraft(form.amountPaid),
     notes: form.notes,
-    interstate: form.interstate,
     items: form.items.map((item) => ({
       productId: item.productId,
       quantity: resolveNumericDraft(item.quantity),
@@ -147,7 +147,8 @@ export function SalesPage() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
   const businessId = session?.businessId ?? null;
-  const { formatMoney, formatDate, gstEnabled, gstInclusivePricing } = useBusinessSettings();
+  const { formatMoney, formatDate, gstEnabled, gstInclusivePricing, stateCode: businessStateCode } =
+    useBusinessSettings();
   const [customerForm, setCustomerForm] = useState<CustomerPayload>(initialCustomer);
   const [saleForm, setSaleForm] = useState<SaleFormState>(initialSale);
   const [saleSearch, setSaleSearch] = useState("");
@@ -168,6 +169,8 @@ export function SalesPage() {
   const [paymentForm, setPaymentForm] = useState<PaymentFormState>(initialPaymentForm);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const saleIdempotencyKeyRef = useRef<string | null>(null);
+  const paymentIdempotencyKeyRef = useRef<string | null>(null);
 
   const customersQuery = useQuery({
     queryKey: ["customers", businessId, deferredCustomerListSearch, false, customerListPage],
@@ -228,9 +231,13 @@ export function SalesPage() {
         throw new Error("Business setup is required before sales can be managed.");
       }
 
-      return createSale(businessId, payload);
+      if (!saleIdempotencyKeyRef.current) {
+        saleIdempotencyKeyRef.current = newIdempotencyKey();
+      }
+      return createSale(businessId, payload, saleIdempotencyKeyRef.current);
     },
     onSuccess: async (sale) => {
+      saleIdempotencyKeyRef.current = null;
       setFeedback("Sale recorded and stock reduced.");
       setSelectedSale(sale);
       setSaleForm({
@@ -245,7 +252,12 @@ export function SalesPage() {
         queryClient.invalidateQueries({ queryKey: ["products", businessId] }),
       ]);
     },
-    onError: handleApiError,
+    onError: (error) => {
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+        saleIdempotencyKeyRef.current = null;
+      }
+      handleApiError(error);
+    },
   });
 
   const updateSaleMutation = useMutation({
@@ -283,9 +295,18 @@ export function SalesPage() {
         notes: paymentForm.notes,
       };
 
-      return createSalePayment(businessId, selectedSale.id, payload);
+      if (!paymentIdempotencyKeyRef.current) {
+        paymentIdempotencyKeyRef.current = newIdempotencyKey();
+      }
+      return createSalePayment(
+        businessId,
+        selectedSale.id,
+        payload,
+        paymentIdempotencyKeyRef.current,
+      );
     },
     onSuccess: async () => {
+      paymentIdempotencyKeyRef.current = null;
       setFeedback("Payment recorded.");
       setPaymentForm({
         ...initialPaymentForm,
@@ -304,6 +325,9 @@ export function SalesPage() {
       }
     },
     onError: (error) => {
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+        paymentIdempotencyKeyRef.current = null;
+      }
       if (error instanceof Error && !(error instanceof ApiError)) {
         setFeedback(error.message);
         return;
@@ -395,9 +419,14 @@ export function SalesPage() {
     setFeedback("Request failed.");
   }
 
+  const saleInterstate = isInterstateSupply(
+    businessStateCode,
+    customersQuery.data?.items.find((customer) => customer.id === saleForm.customerId)?.stateCode,
+  );
+
   const saleTotal = useMemo(
-    () => summarizeTotal(saleForm.items, gstEnabled, gstInclusivePricing, saleForm.interstate),
-    [saleForm.items, saleForm.interstate, gstEnabled, gstInclusivePricing],
+    () => summarizeTotal(saleForm.items, gstEnabled, gstInclusivePricing, saleInterstate),
+    [saleForm.items, saleInterstate, gstEnabled, gstInclusivePricing],
   );
   const amountPaidNow = resolveNumericDraft(saleForm.amountPaid);
   const outstandingAfterSave = Math.max(saleTotal - amountPaidNow, 0);
@@ -594,6 +623,22 @@ export function SalesPage() {
               />
             </div>
 
+            <div className="field">
+              <label htmlFor="customer-state-code">State code</label>
+              <input
+                id="customer-state-code"
+                value={customerForm.stateCode}
+                maxLength={2}
+                onChange={(event) =>
+                  setCustomerForm((current) => ({
+                    ...current,
+                    stateCode: event.target.value.toUpperCase(),
+                  }))
+                }
+                placeholder="29"
+              />
+            </div>
+
             <button type="submit" className="ghost-button" disabled={customerMutation.isPending}>
               {customerMutation.isPending ? "Creating customer..." : "Create customer"}
             </button>
@@ -683,16 +728,11 @@ export function SalesPage() {
             </div>
 
             {gstEnabled ? (
-              <label className="toggle">
-                <input
-                  type="checkbox"
-                  checked={saleForm.interstate}
-                  onChange={(event) =>
-                    setSaleForm((current) => ({ ...current, interstate: event.target.checked }))
-                  }
-                />
-                <span>Interstate supply (charge IGST instead of CGST/SGST)</span>
-              </label>
+              <p className="inline-note">
+                {saleInterstate
+                  ? "Interstate (IGST) — customer state differs from business state."
+                  : "Intrastate (CGST/SGST) — based on customer and business state codes."}
+              </p>
             ) : null}
 
             <div className="split-grid">
@@ -1201,10 +1241,14 @@ export function SalesPage() {
                     {salePaymentsQuery.data.map((payment) => (
                       <div key={payment.id} className="list-row">
                         <span>
+                          {payment.paymentKind === "REFUND" ? "Refund · " : ""}
                           {payment.paymentDate}
                           {payment.notes ? ` · ${payment.notes}` : ""}
                         </span>
-                        <span>{formatMoney(payment.amount)}</span>
+                        <span>
+                          {payment.paymentKind === "REFUND" ? "−" : ""}
+                          {formatMoney(payment.amount)}
+                        </span>
                       </div>
                     ))}
                   </div>

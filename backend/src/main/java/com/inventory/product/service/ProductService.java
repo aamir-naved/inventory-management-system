@@ -83,7 +83,7 @@ public class ProductService {
 
     public ProductResponse update(UUID id, ProductRequest request) {
         UUID businessId = requireBusinessId();
-        Product product = findProduct(id);
+        Product product = findProductForUpdate(id);
 
         validateSkuUniqueness(businessId, request.sku(), id);
         validateBarcodeUniqueness(businessId, request.barcode(), id);
@@ -135,6 +135,13 @@ public class ProductService {
         UUID businessId = requireBusinessId();
 
         return productRepository.findByIdAndBusinessId(id, businessId)
+            .orElseThrow(() -> new EntityNotFoundException("Product not found"));
+    }
+
+    private Product findProductForUpdate(UUID id) {
+        UUID businessId = requireBusinessId();
+
+        return productRepository.findByIdAndBusinessIdForUpdate(id, businessId)
             .orElseThrow(() -> new EntityNotFoundException("Product not found"));
     }
 

@@ -40,6 +40,39 @@ class PaymentControllerTest extends AuthenticatedControllerTestSupport {
     }
 
     @Test
+    void rejectsSalePaymentThatExceedsOutstanding() throws Exception {
+        String customerId = createCustomer();
+        String productId = createProduct();
+        String saleId = createSale(customerId, productId, "0");
+
+        mockMvc.perform(post("/sales/{saleId}/payments", saleId)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"paymentDate":"2026-08-02","amount":4000.00,"notes":"First"}
+                    """))
+            .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/sales/{saleId}/payments", saleId)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"paymentDate":"2026-08-02","amount":4000.00,"notes":"Too much"}
+                    """))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.message").value("Payment exceeds outstanding amount"));
+
+        mockMvc.perform(get("/sales/{id}", saleId)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.amountPaid").value(4000.0))
+            .andExpect(jsonPath("$.outstandingAmount").value(3200.0));
+    }
+
+    @Test
     void recordsFullSalePayment() throws Exception {
         String customerId = createCustomer();
         String productId = createProduct();
@@ -64,6 +97,44 @@ class PaymentControllerTest extends AuthenticatedControllerTestSupport {
             .andExpect(jsonPath("$.paymentStatus").value("PAID"))
             .andExpect(jsonPath("$.amountPaid").value(7200.0))
             .andExpect(jsonPath("$.outstandingAmount").value(0.0));
+    }
+
+    @Test
+    void replaysSalePaymentWhenIdempotencyKeyRepeats() throws Exception {
+        String customerId = createCustomer();
+        String productId = createProduct();
+        String saleId = createSale(customerId, productId, "0");
+        String body = """
+            {"paymentDate":"2026-08-02","amount":1000.00,"notes":"Partial"}
+            """;
+
+        String first = mockMvc.perform(post("/sales/{saleId}/payments", saleId)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .header("Idempotency-Key", "pay-key-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+
+        String second = mockMvc.perform(post("/sales/{saleId}/payments", saleId)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId)
+                .header("Idempotency-Key", "pay-key-1")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+
+        String firstId = com.jayway.jsonpath.JsonPath.read(first, "$.id");
+        String secondId = com.jayway.jsonpath.JsonPath.read(second, "$.id");
+        org.junit.jupiter.api.Assertions.assertEquals(firstId, secondId);
+
+        mockMvc.perform(get("/sales/{id}", saleId)
+                .header("Authorization", authorizationHeader)
+                .header("X-Business-Id", businessId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.amountPaid").value(1000.0));
     }
 
     @Test

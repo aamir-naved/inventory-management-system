@@ -434,12 +434,19 @@ export function ReportsPage() {
           <>
             <section className="card-grid report-summary">
               <article className="stat-card">
-                <h3>Taxable</h3>
-                <div className="stat-value">{formatMoney(gstQuery.data.taxableAmount)}</div>
+                <h3>Output tax</h3>
+                <div className="stat-value">{formatMoney(gstQuery.data.outputTax)}</div>
+                <p className="inline-note">Sales minus sale returns</p>
               </article>
               <article className="stat-card">
-                <h3>Tax</h3>
-                <div className="stat-value">{formatMoney(gstQuery.data.totalTax)}</div>
+                <h3>Input tax</h3>
+                <div className="stat-value">{formatMoney(gstQuery.data.inputTax)}</div>
+                <p className="inline-note">Purchases minus purchase returns</p>
+              </article>
+              <article className="stat-card">
+                <h3>Net tax</h3>
+                <div className="stat-value">{formatMoney(gstQuery.data.netTax)}</div>
+                <p className="inline-note">Output − input</p>
               </article>
             </section>
             <div className="product-list">

@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import com.inventory.auth.mail.LoggingMailService;
 import com.inventory.auth.mail.MailMessage;
+import com.inventory.auth.ratelimit.AuthRateLimiter;
 import com.inventory.auth.sms.SmsGateway;
 import com.jayway.jsonpath.JsonPath;
 
@@ -34,10 +35,14 @@ class AuthControllerTest {
     @Autowired
     private SmsGateway smsGateway;
 
+    @Autowired
+    private AuthRateLimiter authRateLimiter;
+
     @BeforeEach
     void clearMail() {
         loggingMailService.clear();
         smsGateway.clear();
+        authRateLimiter.clear();
     }
 
     @Test
@@ -272,6 +277,10 @@ class AuthControllerTest {
                     """.formatted(nextRefreshToken)))
             .andExpect(status().isOk());
 
+        mockMvc.perform(get("/auth/me")
+                .header("Authorization", "Bearer " + nextAccessToken))
+            .andExpect(status().isUnauthorized());
+
         mockMvc.perform(post("/auth/refresh")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
@@ -328,6 +337,10 @@ class AuthControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.refreshToken").isString());
 
+        mockMvc.perform(get("/auth/me")
+                .header("Authorization", "Bearer " + accessToken))
+            .andExpect(status().isUnauthorized());
+
         mockMvc.perform(post("/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
@@ -366,6 +379,43 @@ class AuthControllerTest {
             .andExpect(jsonPath("$.user.phone").value("+919876500100"))
             .andExpect(jsonPath("$.user.emailVerified").value(true))
             .andExpect(jsonPath("$.user.businessId").isEmpty());
+    }
+
+    @Test
+    void rateLimitsRepeatedLoginAttemptsForSameAccount() throws Exception {
+        mockMvc.perform(post("/auth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "fullName": "Rate Limit Owner",
+                      "email": "rate-limit@example.com",
+                      "password": "password123"
+                    }
+                    """))
+            .andExpect(status().isOk());
+
+        for (int i = 0; i < 5; i++) {
+            mockMvc.perform(post("/auth/login")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""
+                        {
+                          "email": "rate-limit@example.com",
+                          "password": "wrong-password"
+                        }
+                        """))
+                .andExpect(status().isBadRequest());
+        }
+
+        mockMvc.perform(post("/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "email": "rate-limit@example.com",
+                      "password": "wrong-password"
+                    }
+                    """))
+            .andExpect(status().isTooManyRequests())
+            .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("this account")));
     }
 
     private String extractOtpFromLatestSms(String phone) {

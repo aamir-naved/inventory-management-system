@@ -60,4 +60,37 @@ class GstCalculatorTest {
         assertThatThrownBy(() -> GstCalculator.normalizeRate(new BigDecimal("10")))
             .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void proportionalLineCreditIncludesTaxAndAbsorbsRemainderOnFinalReturn() {
+        BigDecimal lineTotal = new BigDecimal("118.00");
+        BigDecimal quantity = new BigDecimal("3.000");
+
+        BigDecimal first = GstCalculator.proportionalLineCredit(
+            lineTotal,
+            quantity,
+            new BigDecimal("1.000"),
+            BigDecimal.ZERO,
+            BigDecimal.ZERO
+        );
+        BigDecimal second = GstCalculator.proportionalLineCredit(
+            lineTotal,
+            quantity,
+            new BigDecimal("1.000"),
+            new BigDecimal("1.000"),
+            first
+        );
+        BigDecimal finalCredit = GstCalculator.proportionalLineCredit(
+            lineTotal,
+            quantity,
+            new BigDecimal("1.000"),
+            new BigDecimal("2.000"),
+            first.add(second)
+        );
+
+        assertThat(first).isEqualByComparingTo("39.33");
+        assertThat(second).isEqualByComparingTo("39.33");
+        assertThat(finalCredit).isEqualByComparingTo("39.34");
+        assertThat(first.add(second).add(finalCredit)).isEqualByComparingTo(lineTotal);
+    }
 }

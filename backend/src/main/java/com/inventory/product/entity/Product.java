@@ -4,12 +4,17 @@ import com.inventory.common.model.TenantAwareEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.math.BigDecimal;
 
 @Entity
 @Table(name = "products")
 public class Product extends TenantAwareEntity {
+
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
 
     @Column(name = "name", nullable = false, length = 150)
     private String name;

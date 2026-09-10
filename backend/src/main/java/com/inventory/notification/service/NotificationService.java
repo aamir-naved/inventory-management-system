@@ -1,6 +1,7 @@
 package com.inventory.notification.service;
 
 import com.inventory.common.tenant.TenantContext;
+import com.inventory.common.time.BusinessClock;
 import com.inventory.inventory.dto.InventoryStockResponse;
 import com.inventory.inventory.service.InventoryService;
 import com.inventory.notification.dto.NotificationItem;
@@ -30,19 +31,22 @@ public class NotificationService {
     private final PurchaseRepository purchaseRepository;
     private final SaleReturnRepository saleReturnRepository;
     private final PurchaseReturnRepository purchaseReturnRepository;
+    private final BusinessClock businessClock;
 
     public NotificationService(
         InventoryService inventoryService,
         SaleRepository saleRepository,
         PurchaseRepository purchaseRepository,
         SaleReturnRepository saleReturnRepository,
-        PurchaseReturnRepository purchaseReturnRepository
+        PurchaseReturnRepository purchaseReturnRepository,
+        BusinessClock businessClock
     ) {
         this.inventoryService = inventoryService;
         this.saleRepository = saleRepository;
         this.purchaseRepository = purchaseRepository;
         this.saleReturnRepository = saleReturnRepository;
         this.purchaseReturnRepository = purchaseReturnRepository;
+        this.businessClock = businessClock;
     }
 
     public NotificationListResponse list() {
@@ -59,7 +63,7 @@ public class NotificationService {
             stock.productId()
         )));
 
-        LocalDate cutoff = LocalDate.now().minusDays(7);
+        LocalDate cutoff = businessClock.today().minusDays(7);
         for (Sale sale : saleRepository.findByBusinessIdAndCancelledFalse(businessId)) {
             if (sale.getSaleDate().isAfter(cutoff)) {
                 continue;

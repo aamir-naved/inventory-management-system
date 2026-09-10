@@ -106,7 +106,7 @@ public class InventoryService {
     }
 
     public InventoryMovementResponse adjustStock(InventoryAdjustmentRequest request) {
-        Product product = findProduct(request.productId());
+        Product product = findProductForUpdate(request.productId());
 
         if (product.isArchived()) {
             throw new IllegalArgumentException("Archived products cannot be adjusted");
@@ -150,10 +150,10 @@ public class InventoryService {
         return Pagination.map(movements, this::toMovementResponse);
     }
 
-    private Product findProduct(UUID productId) {
+    private Product findProductForUpdate(UUID productId) {
         UUID businessId = requireBusinessId();
 
-        return productRepository.findByIdAndBusinessId(productId, businessId)
+        return productRepository.findByIdAndBusinessIdForUpdate(productId, businessId)
             .orElseThrow(() -> new EntityNotFoundException("Product not found"));
     }
 

@@ -77,6 +77,38 @@ public final class GstCalculator {
         return new GstLine(rate, taxable, cgst, sgst, igst, tax, lineTotal);
     }
 
+    /**
+     * Credits a return against a snapshot line total (tax inclusive of the original bill).
+     * The final return for a line absorbs any rounding remainder so credits sum to the line total.
+     */
+    public static BigDecimal proportionalLineCredit(
+        BigDecimal originalLineTotal,
+        BigDecimal originalQuantity,
+        BigDecimal returnQuantity,
+        BigDecimal alreadyReturnedQuantity,
+        BigDecimal alreadyCreditedAmount
+    ) {
+        if (originalQuantity == null || originalQuantity.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Original quantity must be positive");
+        }
+        if (returnQuantity == null || returnQuantity.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Return quantity must be positive");
+        }
+
+        BigDecimal lineTotal = scale(originalLineTotal);
+        BigDecimal alreadyQty = alreadyReturnedQuantity == null ? BigDecimal.ZERO : alreadyReturnedQuantity;
+        BigDecimal alreadyCredited = scale(alreadyCreditedAmount);
+        BigDecimal remainingQty = originalQuantity.subtract(alreadyQty);
+
+        if (returnQuantity.compareTo(remainingQty) == 0) {
+            return scale(lineTotal.subtract(alreadyCredited));
+        }
+
+        return scale(
+            lineTotal.multiply(returnQuantity).divide(originalQuantity, 6, RoundingMode.HALF_UP)
+        );
+    }
+
     private static BigDecimal scale(BigDecimal value) {
         return (value == null ? BigDecimal.ZERO : value).setScale(MONEY_SCALE, RoundingMode.HALF_UP);
     }

@@ -14,6 +14,7 @@ public record PaymentResponse(
     UUID documentId,
     LocalDate paymentDate,
     BigDecimal amount,
+    String paymentKind,
     String notes,
     OffsetDateTime createdAt,
     OffsetDateTime updatedAt

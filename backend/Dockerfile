@@ -12,6 +12,10 @@ WORKDIR /app
 
 COPY --from=build /app/target/inventory-management-system-0.0.1-SNAPSHOT.jar app.jar
 
+# Honour the container cgroup limit so the heap does not eat the whole VPS.
+# Override via JAVA_TOOL_OPTIONS in compose if needed.
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=25.0"
+
 EXPOSE 8080
 
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

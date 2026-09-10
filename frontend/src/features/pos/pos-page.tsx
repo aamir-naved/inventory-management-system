@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -9,7 +9,10 @@ import { getProductByBarcode, type ProductRecord } from "@/features/products/pro
 import { createSale } from "@/features/sales/sales-api";
 import { printSaleInvoice, shareSaleInvoice } from "@/features/documents/document-api";
 import { useBusinessSettings } from "@/features/settings/use-business-settings";
-import { computeGstLine } from "@/lib/gst";
+import { newIdempotencyKey } from "@/lib/idempotency";
+import { computeGstLine, isInterstateSupply } from "@/lib/gst";
+import { useOnlineStatus } from "@/lib/use-online-status";
+import { useT } from "@/i18n/locale-context";
 
 type PosLine = {
   product: ProductRecord;
@@ -26,15 +29,18 @@ function walkInCustomerId(customers: CustomerRecord[]) {
 export function PosPage() {
   const queryClient = useQueryClient();
   const { session } = useAuth();
+  const online = useOnlineStatus();
+  const t = useT();
   const businessId = session?.businessId ?? null;
-  const { formatMoney, gstEnabled, gstInclusivePricing } = useBusinessSettings();
+  const { formatMoney, gstEnabled, gstInclusivePricing, stateCode: businessStateCode } =
+    useBusinessSettings();
   const [barcode, setBarcode] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [lines, setLines] = useState<PosLine[]>([]);
   const [amountPaid, setAmountPaid] = useState("");
-  const [interstate, setInterstate] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [lastSale, setLastSale] = useState<{ id: string; saleNumber: string } | null>(null);
+  const checkoutKeyRef = useRef<string | null>(null);
   const [showHint, setShowHint] = useState(() => {
     try {
       return window.localStorage.getItem(POS_HINT_KEY) !== "dismissed";
@@ -50,6 +56,8 @@ export function PosPage() {
   });
 
   const customers: CustomerRecord[] = customersQuery.data?.items ?? [];
+  const selectedCustomer = customers.find((customer) => customer.id === customerId);
+  const interstate = isInterstateSupply(businessStateCode, selectedCustomer?.stateCode);
 
   useEffect(() => {
     if (customerId || customers.length === 0) {
@@ -131,28 +139,48 @@ export function PosPage() {
       if (lines.length === 0) {
         throw new Error("Scan or add at least one product");
       }
-      return createSale(businessId, {
-        customerId,
-        saleDate: new Date().toISOString().slice(0, 10),
-        amountPaid: Number(amountPaid || totals.total),
-        notes: "POS sale",
-        interstate,
-        items: lines.map((line) => ({
-          productId: line.product.id,
-          quantity: line.quantity,
-          sellingPrice: Number(line.product.sellingPrice),
-          gstRate: Number(line.product.gstRate ?? 0),
-        })),
-      });
+      if (!online) {
+        throw new Error("You are offline. Reconnect before completing the sale.");
+      }
+      if (!checkoutKeyRef.current) {
+        checkoutKeyRef.current = newIdempotencyKey();
+      }
+      return createSale(
+        businessId,
+        {
+          customerId,
+          saleDate: new Date().toISOString().slice(0, 10),
+          amountPaid: Number(amountPaid || totals.total),
+          notes: "POS sale",
+          items: lines.map((line) => ({
+            productId: line.product.id,
+            quantity: line.quantity,
+            sellingPrice: Number(line.product.sellingPrice),
+            gstRate: Number(line.product.gstRate ?? 0),
+          })),
+        },
+        checkoutKeyRef.current,
+      );
     },
     onSuccess: (sale) => {
+      checkoutKeyRef.current = null;
       setLines([]);
       setAmountPaid("");
       setLastSale({ id: sale.id, saleNumber: sale.saleNumber });
       setFeedback(`Saved ${sale.saleNumber}. Share the bill with the customer.`);
       void queryClient.invalidateQueries({ queryKey: ["sales"] });
+      void queryClient.invalidateQueries({ queryKey: ["inventory-summary"] });
+      void queryClient.invalidateQueries({ queryKey: ["inventory-stock"] });
+      void queryClient.invalidateQueries({ queryKey: ["inventory-movements"] });
+      void queryClient.invalidateQueries({ queryKey: ["products"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
     onError: (error) => {
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.status !== 408) {
+        // Client errors (except timeout-like) mean this attempt is done — rotate key.
+        checkoutKeyRef.current = null;
+      }
       setFeedback(error instanceof Error ? error.message : "Unable to save the sale.");
     },
   });
@@ -193,9 +221,9 @@ export function PosPage() {
   if (!businessId) {
     return (
       <section className="empty-state">
-        <h1>Name the shop before using the counter.</h1>
+        <h1>{t("pos.emptyTitle")}</h1>
         <Link to="/welcome" className="primary-button">
-          Open the shop
+          {t("pos.openShop")}
         </Link>
       </section>
     );
@@ -204,10 +232,17 @@ export function PosPage() {
   return (
     <>
       <section className="page-intro">
-        <span className="brand-kicker">Counter</span>
-        <h1>Fast sale entry with barcode.</h1>
-        <p>Scan or type a barcode, collect payment, then share or print the bill.</p>
+        <span className="brand-kicker">{t("pos.kicker")}</span>
+        <h1>{t("pos.title")}</h1>
+        <p>{t("pos.subtitle")}</p>
       </section>
+
+      {!online ? (
+        <section className="panel" role="alert">
+          <h3>{t("pos.offlineTitle")}</h3>
+          <p className="inline-note">{t("pos.offlineBody")}</p>
+        </section>
+      ) : null}
 
       {showHint ? (
         <section className="panel">
@@ -226,43 +261,40 @@ export function PosPage() {
       <section className="panel pos-panel">
         <form className="form-stack" onSubmit={handleCheckout}>
           <div className="field">
-            <label htmlFor="pos-barcode">Barcode</label>
+            <label htmlFor="pos-barcode">{t("pos.barcode")}</label>
             <input
               id="pos-barcode"
               autoFocus
               value={barcode}
               onChange={(event) => setBarcode(event.target.value)}
               onKeyDown={handleKey}
-              placeholder="Scan or type and press Enter"
+              placeholder={t("pos.barcodePlaceholder")}
             />
           </div>
 
           <div className="field">
-            <label htmlFor="pos-customer">Customer</label>
+            <label htmlFor="pos-customer">{t("pos.customer")}</label>
             <select
               id="pos-customer"
               value={customerId}
               onChange={(event) => setCustomerId(event.target.value)}
             >
-              <option value="">Select customer</option>
+              <option value="">{t("pos.selectCustomer")}</option>
               {customers.map((customer) => (
                 <option key={customer.id} value={customer.id}>
                   {customer.name}
                 </option>
               ))}
             </select>
-            <p className="inline-note">Walk-in is chosen automatically for cash sales.</p>
+            <p className="inline-note">{t("pos.walkInNote")}</p>
           </div>
 
           {gstEnabled ? (
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={interstate}
-                onChange={(event) => setInterstate(event.target.checked)}
-              />
-              <span>Interstate (IGST)</span>
-            </label>
+            <p className="inline-note">
+              {interstate
+                ? "Interstate (IGST) — customer state differs from business state."
+                : "Intrastate (CGST/SGST) — based on customer and business state codes."}
+            </p>
           ) : null}
 
           <ul className="list">
@@ -282,7 +314,7 @@ export function PosPage() {
                       )
                     }
                   >
-                    Remove
+                    {t("pos.remove")}
                   </button>
                 </div>
               </li>
@@ -290,14 +322,19 @@ export function PosPage() {
           </ul>
 
           <div className="report-summary">
-            {gstEnabled ? <p>Taxable {formatMoney(totals.taxable)} · Tax {formatMoney(totals.tax)}</p> : null}
+            {gstEnabled ? (
+              <p>
+                {t("pos.taxable", { amount: formatMoney(totals.taxable) })} ·{" "}
+                {t("pos.tax", { amount: formatMoney(totals.tax) })}
+              </p>
+            ) : null}
             <p>
-              <strong>Total {formatMoney(totals.total)}</strong>
+              <strong>{t("pos.total", { amount: formatMoney(totals.total) })}</strong>
             </p>
           </div>
 
           <div className="field">
-            <label htmlFor="pos-paid">Amount paid</label>
+            <label htmlFor="pos-paid">{t("pos.amountPaid")}</label>
             <input
               id="pos-paid"
               type="number"
@@ -311,8 +348,16 @@ export function PosPage() {
 
           {feedback ? <p className="inline-note">{feedback}</p> : null}
 
-          <button type="submit" className="primary-button" disabled={createMutation.isPending}>
-            {createMutation.isPending ? "Saving..." : "Complete sale"}
+          <button
+            type="submit"
+            className="primary-button"
+            disabled={createMutation.isPending || !online}
+          >
+            {createMutation.isPending
+              ? t("pos.saving")
+              : !online
+                ? t("pos.offlineTitle")
+                : t("pos.completeSale")}
           </button>
         </form>
 
@@ -325,7 +370,7 @@ export function PosPage() {
                 void handleShare(lastSale.id, lastSale.saleNumber);
               }}
             >
-              Share bill
+              {t("pos.shareBill")}
             </button>
             <button
               type="button"
@@ -334,7 +379,7 @@ export function PosPage() {
                 void handlePrint(lastSale.id, lastSale.saleNumber);
               }}
             >
-              Print
+              {t("pos.printBill")}
             </button>
           </div>
         ) : null}

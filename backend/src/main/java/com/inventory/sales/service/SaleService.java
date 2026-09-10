@@ -4,8 +4,11 @@ import com.inventory.audit.service.AuditService;
 import com.inventory.common.api.PagedResponse;
 import com.inventory.common.api.Pagination;
 import com.inventory.common.tenant.TenantContext;
+import com.inventory.common.time.BusinessClock;
 import com.inventory.customer.entity.Customer;
 import com.inventory.customer.repository.CustomerRepository;
+import com.inventory.document.numbering.DocumentNumberService;
+import com.inventory.document.numbering.DocumentType;
 import com.inventory.inventory.entity.InventoryMovement;
 import com.inventory.inventory.repository.InventoryMovementRepository;
 import com.inventory.payment.service.PaymentService;
@@ -25,14 +28,18 @@ import com.inventory.sales.repository.SaleReturnRepository;
 import com.inventory.settings.service.SettingsService;
 import com.inventory.tax.GstCalculator;
 import com.inventory.tax.GstLine;
+import com.inventory.tax.GstPlaceOfSupply;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -46,6 +53,8 @@ public class SaleService {
     private final PaymentService paymentService;
     private final SettingsService settingsService;
     private final AuditService auditService;
+    private final DocumentNumberService documentNumberService;
+    private final BusinessClock businessClock;
 
     public SaleService(
         SaleRepository saleRepository,
@@ -55,7 +64,9 @@ public class SaleService {
         InventoryMovementRepository inventoryMovementRepository,
         PaymentService paymentService,
         SettingsService settingsService,
-        AuditService auditService
+        AuditService auditService,
+        DocumentNumberService documentNumberService,
+        BusinessClock businessClock
     ) {
         this.saleRepository = saleRepository;
         this.saleReturnRepository = saleReturnRepository;
@@ -65,22 +76,41 @@ public class SaleService {
         this.paymentService = paymentService;
         this.settingsService = settingsService;
         this.auditService = auditService;
+        this.documentNumberService = documentNumberService;
+        this.businessClock = businessClock;
     }
 
     public SaleResponse create(SaleRequest request) {
         UUID businessId = requireBusinessId();
         Customer customer = findCustomer(request.customerId(), businessId);
 
+        Map<UUID, BigDecimal> demandedByProduct = aggregateRequestedQuantities(request.items());
+        Map<UUID, Product> lockedProducts = lockProductsForUpdate(businessId, demandedByProduct.keySet());
+        boolean allowNegativeStock = settingsService.isNegativeStockAllowed();
+        for (Map.Entry<UUID, BigDecimal> demand : demandedByProduct.entrySet()) {
+            Product product = lockedProducts.get(demand.getKey());
+            if (product.isArchived()) {
+                throw new IllegalArgumentException("Archived products cannot be sold");
+            }
+            BigDecimal after = product.getCurrentStock().subtract(demand.getValue());
+            if (after.compareTo(BigDecimal.ZERO) < 0 && !allowNegativeStock) {
+                throw new IllegalArgumentException("Stock cannot go below zero for " + product.getName());
+            }
+        }
+
         Sale sale = new Sale();
         sale.setBusinessId(businessId);
-        sale.setSaleNumber(generateSaleNumber());
+        sale.setSaleNumber(documentNumberService.next(businessId, DocumentType.SALE));
         sale.setCustomer(customer);
         sale.setSaleDate(request.saleDate());
         sale.setAmountPaid(BigDecimal.ZERO);
         sale.setPaymentStatus(PaymentAmounts.STATUS_PENDING);
         sale.setNotes(normalize(request.notes()));
         sale.setCancelled(false);
-        boolean interstate = Boolean.TRUE.equals(request.interstate());
+        boolean interstate = GstPlaceOfSupply.isInterstate(
+            settingsService.getStateCode(),
+            customer.getStateCode()
+        );
         sale.setInterstate(interstate);
         boolean gstEnabled = settingsService.isGstEnabled();
         boolean inclusive = settingsService.isGstInclusivePricing();
@@ -93,14 +123,7 @@ public class SaleService {
         BigDecimal igstTotal = BigDecimal.ZERO;
 
         for (SaleItemRequest itemRequest : request.items()) {
-            Product product = findProduct(itemRequest.productId(), businessId);
-            if (product.isArchived()) {
-                throw new IllegalArgumentException("Archived products cannot be sold");
-            }
-            BigDecimal after = product.getCurrentStock().subtract(itemRequest.quantity());
-            if (after.compareTo(BigDecimal.ZERO) < 0 && !settingsService.isNegativeStockAllowed()) {
-                throw new IllegalArgumentException("Stock cannot go below zero for " + product.getName());
-            }
+            Product product = lockedProducts.get(itemRequest.productId());
 
             BigDecimal rate = gstEnabled
                 ? GstCalculator.normalizeRate(itemRequest.gstRate() != null ? itemRequest.gstRate() : product.getGstRate())
@@ -116,6 +139,8 @@ public class SaleService {
             SaleItem item = new SaleItem();
             item.setSale(sale);
             item.setProduct(product);
+            item.setProductName(product.getName());
+            item.setUnit(product.getUnit());
             item.setQuantity(itemRequest.quantity());
             item.setUnitPrice(itemRequest.sellingPrice());
             item.setHsnCode(product.getHsnCode());
@@ -221,7 +246,8 @@ public class SaleService {
     }
 
     public SaleResponse cancel(UUID id, SaleCancellationRequest request) {
-        Sale sale = findSale(id);
+        UUID businessId = requireBusinessId();
+        Sale sale = findSaleForUpdate(id, businessId);
         if (sale.isCancelled()) {
             throw new IllegalArgumentException("Sale is already cancelled");
         }
@@ -229,8 +255,14 @@ public class SaleService {
             throw new IllegalArgumentException("Sales with returns cannot be cancelled");
         }
 
+        Map<UUID, BigDecimal> restoreByProduct = new LinkedHashMap<>();
         for (SaleItem item : sale.getItems()) {
-            Product product = item.getProduct();
+            restoreByProduct.merge(item.getProduct().getId(), item.getQuantity(), BigDecimal::add);
+        }
+        Map<UUID, Product> lockedProducts = lockProductsForUpdate(businessId, restoreByProduct.keySet());
+
+        for (SaleItem item : sale.getItems()) {
+            Product product = lockedProducts.get(item.getProduct().getId());
             BigDecimal before = product.getCurrentStock();
             BigDecimal after = before.add(item.getQuantity());
             product.setCurrentStock(after);
@@ -246,6 +278,11 @@ public class SaleService {
 
         sale.setCancelled(true);
         sale.setCancellationReason(request.reason().trim());
+        paymentService.reversePaymentsForCancelledSale(
+            sale,
+            businessClock.today(),
+            "Refund on cancellation of " + sale.getSaleNumber()
+        );
         auditService.record(
             "SALE_CANCELLED",
             "SALE",
@@ -260,6 +297,35 @@ public class SaleService {
             .orElseThrow(() -> new EntityNotFoundException("Sale not found"));
     }
 
+    private Sale findSaleForUpdate(UUID id, UUID businessId) {
+        return saleRepository.findByIdAndBusinessIdForUpdate(id, businessId)
+            .orElseThrow(() -> new EntityNotFoundException("Sale not found"));
+    }
+
+    private Map<UUID, BigDecimal> aggregateRequestedQuantities(List<SaleItemRequest> items) {
+        Map<UUID, BigDecimal> demanded = new LinkedHashMap<>();
+        for (SaleItemRequest item : items) {
+            demanded.merge(item.productId(), item.quantity(), BigDecimal::add);
+        }
+        return demanded;
+    }
+
+    private Map<UUID, Product> lockProductsForUpdate(UUID businessId, Iterable<UUID> productIds) {
+        List<UUID> orderedIds = new ArrayList<>();
+        for (UUID productId : productIds) {
+            orderedIds.add(productId);
+        }
+        orderedIds.sort(Comparator.naturalOrder());
+
+        Map<UUID, Product> locked = new HashMap<>();
+        for (UUID productId : orderedIds) {
+            Product product = productRepository.findByIdAndBusinessIdForUpdate(productId, businessId)
+                .orElseThrow(() -> new EntityNotFoundException("Product not found"));
+            locked.put(productId, product);
+        }
+        return locked;
+    }
+
     private Customer findCustomer(UUID id, UUID businessId) {
         Customer customer = customerRepository.findByIdAndBusinessId(id, businessId)
             .orElseThrow(() -> new EntityNotFoundException("Customer not found"));
@@ -267,11 +333,6 @@ public class SaleService {
             throw new IllegalArgumentException("Archived customers cannot be used");
         }
         return customer;
-    }
-
-    private Product findProduct(UUID id, UUID businessId) {
-        return productRepository.findByIdAndBusinessId(id, businessId)
-            .orElseThrow(() -> new EntityNotFoundException("Product not found"));
     }
 
     private void recordMovement(
@@ -296,10 +357,6 @@ public class SaleService {
     private UUID requireBusinessId() {
         return TenantContext.getBusinessId()
             .orElseThrow(() -> new IllegalArgumentException("X-Business-Id header is required"));
-    }
-
-    private String generateSaleNumber() {
-        return "SAL-" + LocalDate.now() + "-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
     }
 
     private String normalize(String value) {
@@ -353,8 +410,8 @@ public class SaleService {
                 return new SaleItemResponse(
                     item.getId(),
                     item.getProduct().getId(),
-                    item.getProduct().getName(),
-                    item.getProduct().getUnit(),
+                    item.getProductName(),
+                    item.getUnit(),
                     item.getQuantity(),
                     item.getUnitPrice(),
                     item.getLineTotal(),

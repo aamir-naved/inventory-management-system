@@ -28,9 +28,13 @@ public class ShopOnboardingService {
     @Transactional
     public void provisionNewShop(UUID businessId, UUID userId) {
         TenantContext.set(businessId, MembershipRole.OWNER, userId);
-        customerService.create(new CustomerRequest("Walk-in", null, null, null));
-        for (ProductRequest product : starterCatalog()) {
-            productService.create(product);
+        try {
+            customerService.create(new CustomerRequest("Walk-in", null, null, null, null));
+            for (ProductRequest product : starterCatalog()) {
+                productService.create(product);
+            }
+        } finally {
+            TenantContext.clear();
         }
     }
 

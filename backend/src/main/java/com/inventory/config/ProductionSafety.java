@@ -6,7 +6,9 @@ public final class ProductionSafety {
 
     public static final String KNOWN_DEV_JWT_SECRET =
         "inventory-management-system-super-secret-key-for-development-only-2026";
+    public static final String KNOWN_DEV_DB_PASSWORD = "inventory_password";
     public static final int MIN_JWT_SECRET_LENGTH = 32;
+    public static final int MIN_DB_PASSWORD_LENGTH = 12;
     public static final int MIN_PLATFORM_ADMIN_PASSWORD_LENGTH = 12;
 
     private ProductionSafety() {
@@ -34,6 +36,27 @@ public final class ProductionSafety {
             );
         }
 
+        String dbPassword = firstNonBlank(
+            environment.getProperty("spring.datasource.password"),
+            environment.getProperty("DB_PASSWORD")
+        );
+        if (dbPassword == null) {
+            throw new IllegalStateException(
+                "DB_PASSWORD / spring.datasource.password must be set when using the prod profile."
+            );
+        }
+        if (dbPassword.length() < MIN_DB_PASSWORD_LENGTH) {
+            throw new IllegalStateException(
+                "DB_PASSWORD must be at least " + MIN_DB_PASSWORD_LENGTH
+                    + " characters when using the prod profile."
+            );
+        }
+        if (KNOWN_DEV_DB_PASSWORD.equals(dbPassword)) {
+            throw new IllegalStateException(
+                "DB_PASSWORD must not use the development default (inventory_password) when using the prod profile."
+            );
+        }
+
         String mailHost = firstNonBlank(
             environment.getProperty("spring.mail.host"),
             environment.getProperty("SPRING_MAIL_HOST")
@@ -51,6 +74,16 @@ public final class ProductionSafety {
         if (publicAppUrl == null) {
             throw new IllegalStateException(
                 "APP_PUBLIC_APP_URL must be set when using the prod profile so verify/reset email links point at the public UI."
+            );
+        }
+
+        String smsWebhook = firstNonBlank(
+            environment.getProperty("app.auth.sms-webhook-url"),
+            environment.getProperty("APP_SMS_WEBHOOK_URL")
+        );
+        if (smsWebhook == null) {
+            throw new IllegalStateException(
+                "APP_SMS_WEBHOOK_URL must be set when using the prod profile so phone-login OTPs are not written to application logs."
             );
         }
 

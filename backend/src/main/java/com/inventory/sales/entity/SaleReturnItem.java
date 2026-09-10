@@ -36,6 +36,12 @@ public class SaleReturnItem extends AuditableEntity {
     @Column(name = "line_total", nullable = false, precision = 19, scale = 2)
     private BigDecimal lineTotal;
 
+    @Column(name = "product_name", nullable = false, length = 150)
+    private String productName;
+
+    @Column(name = "unit", nullable = false, length = 30)
+    private String unit;
+
     public SaleReturn getSaleReturn() {
         return saleReturn;
     }
@@ -82,5 +88,21 @@ public class SaleReturnItem extends AuditableEntity {
 
     public void setLineTotal(BigDecimal lineTotal) {
         this.lineTotal = lineTotal;
+    }
+
+    public String getProductName() {
+        return productName;
+    }
+
+    public void setProductName(String productName) {
+        this.productName = productName;
+    }
+
+    public String getUnit() {
+        return unit;
+    }
+
+    public void setUnit(String unit) {
+        this.unit = unit;
     }
 }

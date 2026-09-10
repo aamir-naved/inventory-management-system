@@ -28,6 +28,7 @@ const initialForm: SupplierPayload = {
   contactPerson: "",
   mobileNumber: "",
   addressLine: "",
+  stateCode: "",
 };
 
 function toPayload(supplier: SupplierRecord): SupplierPayload {
@@ -36,6 +37,7 @@ function toPayload(supplier: SupplierRecord): SupplierPayload {
     contactPerson: supplier.contactPerson ?? "",
     mobileNumber: supplier.mobileNumber ?? "",
     addressLine: supplier.addressLine ?? "",
+    stateCode: supplier.stateCode ?? "",
   };
 }
 
@@ -274,6 +276,18 @@ export function SuppliersPage() {
                 onChange={(event) => updateField("addressLine", event.target.value)}
                 placeholder="Industrial Road"
               />
+            </div>
+
+            <div className="field">
+              <label htmlFor="supplier-state-code">State code</label>
+              <input
+                id="supplier-state-code"
+                value={form.stateCode}
+                maxLength={2}
+                onChange={(event) => updateField("stateCode", event.target.value.toUpperCase())}
+                placeholder="29"
+              />
+              <p className="inline-note">GST state code — used to choose CGST/SGST vs IGST.</p>
             </div>
 
             {feedback ? <p className="inline-note">{feedback}</p> : null}

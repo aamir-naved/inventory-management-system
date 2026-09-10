@@ -20,6 +20,8 @@ import com.inventory.auth.dto.VerifyEmailRequest;
 import com.inventory.auth.dto.PhoneOtpRequest;
 import com.inventory.auth.dto.PhoneOtpVerifyRequest;
 import com.inventory.auth.dto.PublicConfigResponse;
+import com.inventory.auth.ratelimit.AuthRateLimiter;
+import com.inventory.auth.ratelimit.ClientIpResolver;
 import com.inventory.auth.service.AuthService;
 import com.inventory.auth.service.OtpAuthService;
 import com.inventory.config.RegistrationPolicy;
@@ -27,6 +29,7 @@ import com.inventory.staff.dto.AcceptInviteRequest;
 import com.inventory.staff.dto.StaffInvitePreviewResponse;
 import com.inventory.staff.service.StaffService;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.RequestParam;
 
@@ -38,17 +41,20 @@ public class AuthController {
     private final OtpAuthService otpAuthService;
     private final StaffService staffService;
     private final RegistrationPolicy registrationPolicy;
+    private final AuthRateLimiter authRateLimiter;
 
     public AuthController(
         AuthService authService,
         OtpAuthService otpAuthService,
         StaffService staffService,
-        RegistrationPolicy registrationPolicy
+        RegistrationPolicy registrationPolicy,
+        AuthRateLimiter authRateLimiter
     ) {
         this.authService = authService;
         this.otpAuthService = otpAuthService;
         this.staffService = staffService;
         this.registrationPolicy = registrationPolicy;
+        this.authRateLimiter = authRateLimiter;
     }
 
     @GetMapping("/public-config")
@@ -62,17 +68,20 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public AuthResponse login(@Valid @RequestBody LoginRequest request) {
+    public AuthResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        authRateLimiter.checkLogin(ClientIpResolver.resolve(httpRequest), request.email());
         return authService.login(request);
     }
 
     @PostMapping("/otp/request")
-    public MessageResponse requestOtp(@Valid @RequestBody PhoneOtpRequest request) {
+    public MessageResponse requestOtp(@Valid @RequestBody PhoneOtpRequest request, HttpServletRequest httpRequest) {
+        authRateLimiter.checkOtpRequest(ClientIpResolver.resolve(httpRequest), request.phone());
         return otpAuthService.requestCode(request.phone());
     }
 
     @PostMapping("/otp/verify")
-    public AuthResponse verifyOtp(@Valid @RequestBody PhoneOtpVerifyRequest request) {
+    public AuthResponse verifyOtp(@Valid @RequestBody PhoneOtpVerifyRequest request, HttpServletRequest httpRequest) {
+        authRateLimiter.checkOtpVerify(ClientIpResolver.resolve(httpRequest), request.phone());
         return otpAuthService.verify(request.phone(), request.code());
     }
 
@@ -82,7 +91,11 @@ public class AuthController {
     }
 
     @PostMapping("/forgot-password")
-    public MessageResponse forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+    public MessageResponse forgotPassword(
+        @Valid @RequestBody ForgotPasswordRequest request,
+        HttpServletRequest httpRequest
+    ) {
+        authRateLimiter.checkForgotPassword(ClientIpResolver.resolve(httpRequest), request.email());
         return authService.forgotPassword(request);
     }
 
