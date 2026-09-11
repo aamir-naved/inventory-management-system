@@ -38,7 +38,7 @@ If the current password is wrong, you will see an error. Fix it and save again.
 ## Tips
 
 - Clerks should change the temporary password they chose at invite time if others saw it.
-- After a password change, keep using the new one on this browser; you stay signed in.
+- After a password change, **this browser and other devices** must sign in again with the new password. That is so a leaked old password cannot stay logged in.
 
 ---
 

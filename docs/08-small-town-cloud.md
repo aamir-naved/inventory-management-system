@@ -27,7 +27,7 @@ A new owner can:
 5. Complete a sale and **share/print** the bill (WhatsApp/share sheet on the phone).
 6. Restart their phone or PC — the shop still works because **Postgres is on the server**, with **restart policies** and a **backup script**.
 
-Not in this plan (later): SMS vendor you must pay, Hindi UI, offline queue, WhatsApp Business API, billing/subscriptions. Super Admin (`/platform`) is in the product now; it is how production shops are onboarded.
+Not in this plan (later): SMS vendor you must pay, WhatsApp Business API, billing/subscriptions. Super Admin (`/platform`) is in the product now; it is how production shops are onboarded. Menu and Counter can switch to Hindi.
 
 ---
 
@@ -41,7 +41,7 @@ Not in this plan (later): SMS vendor you must pay, Hindi UI, offline queue, What
 | D. Sell-first | Home is Counter, not a metrics wall | Yes |
 | E. Share bill | WhatsApp / native share of the PDF | Yes |
 | F. Your cloud | One VPS, many shops via existing `business_id` | Ops docs; no per-shop Docker on the counter PC |
-| G. Later | MSG91/SMS, Hindi, WhatsApp API, light offline | After 5 live pilots |
+| G. Later | MSG91/SMS, WhatsApp API | After 5 live pilots |
 
 ---
 

@@ -51,6 +51,7 @@ Items you are **not allowed** to use are **hidden**. If you type a forbidden add
 
 The bottom of the sidebar shows:
 
+- **Language** — **English** or **हिन्दी**. This switches the left menu, top bar, and **Counter** labels. Other screens stay in English. The choice is stored in this browser only.
 - Shop name, or **No business configured yet**
 - Your role in lowercase (`owner access`, `manager access`, `clerk access`)
 
@@ -69,7 +70,7 @@ Right side:
 |---------|----------------|
 | **Alerts (N)** | Opens or closes a list of low-stock and overdue-payment warnings. `N` is how many alerts exist. Refreshes about every minute. |
 | **Business ready** / **Setup pending** | Whether a business profile exists. Setup pending means go to **Business**. |
-| **Sign out** | Ends this session on this browser. You must sign in again. |
+| **Sign out** | Ends this login. You must sign in again. Other devices using the same account are signed out too. |
 
 ### Alerts panel
 
@@ -172,7 +173,11 @@ If you see **No matches**, create the party on the left of that page, or add the
 
 ### Money and dates
 
-Rupees and date layout follow **Settings** (currency code and date format). Examples: `₹1,234.50` and `31/12/2026`.
+Rupees use Indian grouping (`₹1,23,456.50`). Date layout follows **Settings** (currency code and date format). Examples: `₹1,234.50` and `31/12/2026`.
+
+### This screen crashed
+
+If a page fails, you see **This screen crashed** with **Reload page** and **Go home**. Saved sales and purchases are on the server. Reload and continue. Do not tap Complete sale again until you have checked **Sales** that the bill is not already there.
 
 ### Red error text under a field
 
@@ -191,6 +196,8 @@ If a screen says **Finish business setup**, the business profile is missing. Not
 ## Signing out
 
 Click **Sign out** in the top bar when you leave the counter computer, especially if clerks share a machine. The next person should sign in with **their** email.
+
+Sign out, a password change, or the owner removing access also ends other open sessions for that login (phone, another PC). That is intentional.
 
 Do not share the owner password. Invite a **Clerk** instead.
 

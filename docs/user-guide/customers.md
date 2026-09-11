@@ -27,6 +27,7 @@ Heading: **Create customer** or **Edit customer**.
 | **Contact person** | No | Max 120 characters. Example: `Neha Shah`. |
 | **Mobile number** | No | 7–20 phone characters if filled. Example: `+91 9998887776`. |
 | **Address** | No | Max 255 characters. Example: `Ring Road`. Useful if you deliver. |
+| **State code** | No | Two-digit GST state (`29`, `27`, `07`, …). Needed when GST is on and this party is in **another state** than the shop — then bills use IGST. Leave blank for Walk-in and local parties (treated as CGST/SGST). |
 
 Click **Create customer** or **Save customer**.
 
@@ -77,6 +78,7 @@ To print or take payment, go to **Sales**, search the sale number, **View detail
 |-----------|------------|
 | Unknown cash buyer at Counter | Select `Walk-in` (create it once here) |
 | Builder who pays at month end | Real name + mobile; leave **Amount paid now** as 0 on the sale |
+| Out-of-state GST customer | Fill **State code** so Counter/Sales charge IGST |
 | Wrong duplicate party | Archive the duplicate; keep the one that already has invoices |
 | Customer moved away, still owes | Do **not** archive until dues are settled, or you will hunt with Show archived |
 

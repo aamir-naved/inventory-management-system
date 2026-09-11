@@ -39,7 +39,7 @@ A shop owner can:
 | Audit + in-app alerts | Done |
 | Mobile navigation | Done (drawer under 960px) |
 | Ops | Compose, `prod` fail-fast, Caddy HTTPS overlay, backup/restore, MIT, CI |
-| Hosted email / multi-tenant SaaS billing | Operator-configured SMTP; one shop per deployment is the intended model |
+| Hosted email / multi-tenant SaaS billing | Operator SMTP; many shops per host via `/platform`. No billed SaaS plans yet |
 
 ---
 

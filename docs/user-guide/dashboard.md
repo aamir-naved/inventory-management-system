@@ -34,7 +34,7 @@ Amounts use the currency from Settings (usually rupees).
 | **Today’s purchases** | Purchase total **for today**. | Record purchases on **Purchases**. |
 | **Total revenue** | **Lifetime** net sales after returns (not only today). | Historical; it grows as you sell. |
 | **Total products** | Count of **active** catalog items (not archived). | Add items on **Products**. |
-| **Inventory value** | **Cost price × current quantity** for stock. | Uses cost, not selling price. Opening stock and purchases increase it; sales decrease quantity. |
+| **Inventory value** | **Weighted average cost × current quantity** for stock. | Cost mixes in each purchase. Opening stock uses the cost you typed on the product. Sales reduce quantity, not the cost rate. |
 | **Low stock** | How many products are at or **below** their threshold. | Open **Inventory**, tick **Low stock only**, then purchase or adjust. |
 | **Outstanding customers** | Sum of unpaid customer balances. | **Sales** or **Customers** to collect. |
 | **Outstanding suppliers** | Sum of unpaid supplier balances. | **Purchases** to pay. |

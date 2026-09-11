@@ -72,7 +72,7 @@ Then fill:
 | **State** | State name. Example: `Karnataka`. |
 | **Prices include GST** | Tick if the **selling and purchase prices you type already include tax**. Leave **off** if you want the app to **add** GST on top of the rate (exclusive pricing). |
 
-**When to tick interstate later (on a sale or purchase):** the other party is in a **different state** than **State code** here. Tick **Interstate** on that bill so IGST is used instead of CGST/SGST.
+**When GST is on:** the shop **State code** is compared with each customer’s or supplier’s state. Bills show CGST/SGST or IGST automatically. There is no Interstate tick on Sales or Counter. Fill party state codes on [Customers](customers.md) / [Suppliers](suppliers.md).
 
 **When to tick inclusive prices:** your rack rate is `₹118` for an 18% item and you do not want the bill to become `₹118 + 18%`. If your rate is `₹100` plus 18% = `₹118` on the invoice, leave inclusive **off**.
 
@@ -114,7 +114,7 @@ While saving, the button shows **Saving...**.
 
 ## What not to do
 
-- Do not create a second owner account expecting a second shop in the same deployment. This product is **one shop per installation**.
+- Do not create a second owner account expecting a second shop for yourself. Each login owns **one** shop. The host can run many shops; only the Super Admin console at `/platform` adds another tenant.
 - Do not put a random currency like `RS` — it must be three letters (`INR`).
 - Do not enable GST and leave GSTIN blank if you need it on the PDF; fill GSTIN and state so invoices look complete.
 - Changing **Prices include GST** does not rewrite old bills; it applies to **new** sales and purchases.

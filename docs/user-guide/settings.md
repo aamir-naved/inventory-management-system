@@ -31,7 +31,7 @@ If you have not created a business yet, this page only shows **Complete business
 | **Default low-stock threshold** | Number, 0 or more, decimals allowed. Placeholder `0`. | Copied onto **new** products when you open the create form. Changing this does **not** rewrite existing products. |
 | **Allow negative stock on sales and adjustments** | Checkbox, **off** by default. | **Off:** a sale or negative adjustment is refused if it would take quantity below zero. **On:** you can sell or write off more than you have; stock can go negative. Turn **on** only if you often bill first and enter the purchase later. |
 | **Enable GST on invoices** | Checkbox. | Same as Business: tax lines on sales/purchases, GST report, tax on PDFs. |
-| **GSTIN / State code / State** | Shown when GST is on. Same meaning as [Business](business.md). | Printed and used for tax split. |
+| **GSTIN / State code / State** | Shown when GST is on. Same meaning as [Business](business.md). | Shop state is compared with customer/supplier state codes to choose CGST/SGST vs IGST. |
 | **Selling and purchase prices include GST** | Shown when GST is on. | Same as **Prices include GST** on Business. |
 
 Click **Save settings**. Success: **Settings saved.**

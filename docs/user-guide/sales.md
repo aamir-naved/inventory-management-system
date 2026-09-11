@@ -7,7 +7,7 @@
 
 ## Why this screen exists
 
-This is the full **invoice desk**: named customer, several products, credit (pay later), GST interstate flag, notes, print/download PDF, collect money later, customer returns, and voiding a wrong invoice.
+This is the full **invoice desk**: named customer, several products, credit (pay later), GST (local vs interstate from state codes), notes, print/download PDF, collect money later, customer returns, and voiding a wrong invoice.
 
 Saving a sale **decreases** stock. A return **increases** stock. Cancel **restores** stock (only if there are no returns).
 
@@ -19,7 +19,7 @@ For “scan, take cash, print” use [Counter](counter.md). Counter **creates th
 
 - At least one [customer](customers.md) (create `Walk-in` for cash).
 - Products with enough stock (unless Settings allow negative stock).
-- If GST is on: know if this supply is interstate.
+- If GST is on: the customer’s **State code** should be set when they are in another state (so IGST is used). Blank state = local tax.
 
 ---
 
@@ -45,7 +45,7 @@ Same fields as [Customers](customers.md). **Create customer** selects them on th
 |-------|----------|------------------------|
 | **Customer** | Yes | Search-and-select, or click a chip. |
 | **Sale date** | Yes | Defaults to today. Back-date if you are entering yesterday’s register. |
-| **Interstate supply (charge IGST instead of CGST/SGST)** | If GST is on | Tick when the **customer is in another state** than the shop. Leave off for local (CGST+SGST). |
+| Tax note | If GST is on | Read-only: **Intrastate (CGST/SGST)** or **Interstate (IGST)** from customer vs shop state. Change it by editing the customer’s **State code**, not a tick box. |
 | **Amount paid now** | No (blank = 0) | Cash/UPI received **today**. `0` = full credit (**PENDING**). Full total = **PAID**. In between = **PARTIAL**. |
 | **Notes** | No | Example: `Counter sale`, site name, PO number. Max 255 characters. |
 
@@ -68,7 +68,7 @@ Need at least one complete line.
 - **Paid now**
 - **Outstanding after save** — what they will still owe
 
-Click **Record sale**. Success: **Sale recorded and stock reduced.**
+Click **Record sale**. Success: **Sale recorded and stock reduced.** The sale number looks like `SAL/2025-26/000001` (Indian financial year).
 
 If stock is insufficient and negative stock is not allowed, the save fails. Reduce quantity, purchase stock, adjust inventory, or enable negative stock.
 
@@ -108,7 +108,7 @@ Change **Sale date** or **Notes** only, then **Save details**. Wrong products �
 | **Amount** | Pre-filled with outstanding. Must be &gt; 0 and not more than due. |
 | **Notes** | `Cash`, `UPI`, `Bank transfer`, cheque no. |
 
-**Record payment**. **Payment history** lists earlier receipts (the amount typed at create time is stored as **Initial payment**).
+**Record payment**. **Payment history** lists earlier receipts (the amount typed at create time is stored as **Initial payment**). If this sale was later **cancelled**, a **Refund** line appears for the amount that had been paid.
 
 **Fully paid** means nothing left to collect.
 
@@ -123,7 +123,7 @@ Customer brings goods back. Stock **comes back in**. Net invoice and dues reduce
 | **Notes** | Example: `Customer brought unused stock`. |
 | **Quantity** per product | Up to **Returnable**. Leave blank if that line is not returned. At least one quantity &gt; 0. |
 
-**Record sale return**. Listed under **Returns on this sale**.
+**Record sale return**. Listed under **Returns on this sale**. The credit includes tax (a ₹118 inclusive line refunds ₹118, not ₹100). Return numbers look like `RET/2025-26/000001`.
 
 If nothing is returnable: **Nothing left to return**.
 
@@ -135,7 +135,7 @@ Whole invoice was a mistake and **no returns** exist.
 |-------|----------------|
 | **Cancellation reason** | Required. Example: `Duplicate invoice`. |
 
-**Cancel sale**. Stock restored. History keeps the number as Cancelled.
+**Cancel sale**. Stock restored. Money that was already recorded is written as a **Refund** in payment history (receipts stay as a trail). History keeps the number as Cancelled.
 
 If returns exist, cancel is blocked — use another return instead.
 
@@ -153,7 +153,7 @@ Returns can turn a PARTIAL sale into PAID if the remaining net equals what was a
 
 ## GST
 
-Same rules as purchases: product GST %, interstate → IGST, inclusive vs exclusive from Settings.
+Product GST % and inclusive vs exclusive come from Settings / the catalog. Local vs interstate is **not** a tick on this form — see [GST on invoices](gst.md). Renaming a product later does **not** change the name already printed on this invoice.
 
 ---
 
@@ -175,7 +175,7 @@ Both produce a sale you can reprint here.
 - Quantity higher than stock.
 - **Amount paid now** left 0 when cash was taken — they will show as outstanding until you record payment.
 - Cancelling instead of returning two bags — cancel voids **everything**.
-- Interstate ticked for a local customer.
+- Wrong **State code** on the customer (IGST vs CGST/SGST follows that, not a tick box).
 
 ---
 

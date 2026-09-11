@@ -6,6 +6,14 @@ If you have never signed in, start with [First day](first-day.md) instead.
 
 ---
 
+## Switch the app to Hindi
+
+After sign-in: left menu (phone: **Menu**) → bottom **Language** → **हिन्दी**.
+
+This covers the sidebar, top bar, and **Counter**. Sales, Products, Reports, and the rest stay in English. The choice is remembered on this browser.
+
+---
+
 ## Find a job
 
 **Selling**
@@ -51,6 +59,7 @@ If you have never signed in, start with [First day](first-day.md) instead.
 
 **Shop and people**
 
+- [Switch the app to Hindi](#switch-the-app-to-hindi)
 - [Open the shop in the morning](#open-the-shop-in-the-morning)
 - [See today’s business](#see-todays-business)
 - [Invite a counter person](#invite-a-counter-person)
@@ -69,6 +78,8 @@ If you have never signed in, start with [First day](first-day.md) instead.
 - [No email arrived](#no-email-arrived)
 - [Print did not open](#print-did-not-open)
 - [I typed the wrong amount paid](#i-typed-the-wrong-amount-paid)
+- [The screen crashed](#the-screen-crashed)
+- [Counter says I am offline](#counter-says-i-am-offline)
 
 ---
 
@@ -79,7 +90,7 @@ If you have never signed in, start with [First day](first-day.md) instead.
 3. Click **Alerts** in the top bar.
 4. If a lorry is due, an owner/manager uses **Purchases**.
 
-On a phone, tap **Menu** first. More: [Around the workspace](workspace.md).
+On a phone, tap **Menu** first. To use Hindi on the menu and Counter, set **Language** at the bottom of the sidebar. More: [Around the workspace](workspace.md).
 
 ---
 
@@ -91,7 +102,7 @@ On a phone, tap **Menu** first. More: [Around the workspace](workspace.md).
 4. Leave **Amount paid** blank if they paid the full total
 5. **Complete sale**, then **Share bill** (or **Print**)
 
-Full screen: [Counter](counter.md).
+If Counter shows **You are offline**, reconnect first. Full screen: [Counter](counter.md).
 
 ---
 
@@ -167,7 +178,7 @@ Owner or manager only, and only if **no returns** exist on that invoice.
 
 **Sales** → **View details** → type **Cancellation reason** (required, example: `Billed twice`) → **Cancel sale**.
 
-Stock is restored. Clerks must ask an owner or manager.
+Stock is restored. Money that was already recorded shows as a **Refund** in payment history. Clerks must ask an owner or manager.
 
 If some quantity was already returned, cancel is blocked. Return the rest instead.
 
@@ -178,7 +189,7 @@ If some quantity was already returned, cancel is blocked. Return the rest instea
 **Customers**, or the left-hand form on **Sales**:
 
 - **Customer name** is required
-- Contact person, mobile, and address are optional
+- Contact person, mobile, address, and **State code** (for GST IGST) are optional
 
 Click **Create customer**. Full screen: [Customers](customers.md).
 
@@ -197,10 +208,10 @@ Create a named customer when you need their phone, delivery address, or credit h
 1. **Suppliers** — create the company if new (or use the left form on **Purchases**).
 2. **Purchases** — select the supplier, set **Purchase date**, **Add item**, quantity and **purchase** price (what you pay, not what you sell at).
 3. **Amount paid now** — what you paid with this bill (`0` if the supplier gave credit).
-4. If GST is on and the supplier is in another state, tick **Interstate**.
+4. If GST is on and the supplier is in another state, set their **State code** first (there is no Interstate tick on the bill).
 5. **Record purchase**.
 
-Stock goes up. Full screen: [Purchases](purchases.md).
+Stock goes up. The product **cost price** becomes a weighted average of old stock and this bill. Full screen: [Purchases](purchases.md).
 
 ---
 
@@ -325,9 +336,13 @@ New invoices then show tax. Old bills are not rewritten.
 
 ## Charge IGST (other state)
 
-On **that** sale or purchase, tick **Interstate**. The shop’s state is **State code** on Business.
+There is no Interstate tick on the bill.
 
-Leave the box off for local parties (CGST + SGST).
+1. Shop state is **State code** on **Business**.
+2. On the **customer** (sales) or **supplier** (purchases), fill **State code** with the other state’s two digits (example `27`).
+3. Counter / Sales / Purchases then show **Interstate (IGST)**.
+
+Leave the party state **blank** (or the same as the shop) for local tax (CGST + SGST). Walk-in cash sales with no state stay local.
 
 ---
 
@@ -349,7 +364,7 @@ Leave it **off** when you type a net rate and want the app to add 5% / 12% / 18%
 |----------------|-----|----------|
 | Sales for a month | Sales | From date and To date |
 | Purchases for a month | Purchases | Same dates |
-| GST working | GST | Same dates |
+| GST working | GST | Same dates. Read **Output tax**, **Input tax**, **Net tax** |
 | Who hasn’t paid | Customer dues | — |
 | What we owe | Supplier dues | — |
 | Godown stock | Inventory | Optional: Low stock only |
@@ -407,6 +422,8 @@ There is no “edit role” button.
 ## Change my name or password
 
 **Profile** → change **Full name**, or fill **Current password** and **New password** (at least 8 characters) → **Save profile**.
+
+You will need to sign in again on this device and any other device that used the old password.
 
 Email cannot be changed here.
 
@@ -482,7 +499,23 @@ You cannot edit a payment line after save.
 - If you **over-stated** cash on a brand-new mistaken invoice: owner/manager **Cancel sale** (no returns) and create it again.
 - If the invoice is otherwise correct, settle the extra outside the app (refund in UPI/cash) and leave a **note** on the sale.
 
-There is no separate “refund voucher” screen.
+There is no separate “refund voucher” screen. Cancelling a paid invoice writes a **Refund** line in payment history.
+
+---
+
+## Counter says I am offline
+
+The phone or PC cannot reach the server. **Complete sale** is disabled.
+
+Reconnect Wi‑Fi or mobile data. Do not assume a bill saved. Check **Sales** if you already tapped Complete sale during a blip.
+
+---
+
+## The screen crashed
+
+You see **This screen crashed** with **Reload page** and **Go home**.
+
+Saved work is on the server. Reload, then check **Sales** / **Purchases** before entering the same bill again.
 
 ---
 

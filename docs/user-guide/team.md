@@ -49,7 +49,7 @@ Errors: invalid email, or the server message if they already have a pending invi
 
 Each member: full name, email, role, and **(removed)** if deactivated.
 
-**Remove access** (owner, not on the owner row): they can no longer use this shop. You cannot remove the owner. You cannot remove yourself.
+**Remove access** (owner, not on the owner row): they can no longer use this shop, and their open sessions are ended. You cannot remove the owner. You cannot remove yourself.
 
 Removed people stay listed as inactive so you remember who had access.
 

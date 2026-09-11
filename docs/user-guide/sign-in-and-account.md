@@ -12,7 +12,7 @@ These screens appear **before** the shop menu (except Profile, which is inside t
 
 If you are already signed in and you open `/login` or `/forgot-password`, the app sends you to **Counter** (or **Start** if the shop is not named yet). Platform Super Admins go to `/platform`.
 
-On a hosted shop, **Email signup** may be hidden. Then only the operator can create shops; you sign in with the email or mobile they issued.
+On a hosted shop, **Email signup** is hidden. Then only the operator can create shops; you sign in with the email or mobile they issued. The host operator uses a separate console at `/platform` — shop owners never need that address.
 
 ---
 
@@ -39,6 +39,8 @@ Right: **Mobile OTP**, **Email**, and **Email signup** (signup is hidden when th
 
 New shops go to **Start** to type the shop name. Returning shops go to **Counter**.
 
+Too many OTP sends or wrong codes in a short time: wait about a minute (`Too many OTP requests…`).
+
 ### Sign in (existing email user)
 
 1. Click **Email**.
@@ -54,7 +56,9 @@ On success you go toward **Counter** (or **Start** if the business is missing). 
 #### If sign-in fails
 
 - Wrong email or password — try again; passwords are case-sensitive.
+- **Too many login attempts… Try again in a minute** — wait, then try again. After several failures the app pauses both this account and this network.
 - After a reset, the page may already show **Password reset successful. Sign in with your new password.**
+- After you change the password on **Profile**, or the operator resets it, older sessions on other devices stop working. Sign in again with the new password.
 
 ### Email signup (optional)
 
@@ -88,6 +92,8 @@ You cannot see the old password. The app emails a one-time reset link if that em
 3. Click **Send reset link**.
 
 On success you see a confirmation message and **Back to sign in**. For privacy, the app may say instructions were sent **if the account exists** — you will not get a list of whether the email is registered.
+
+Too many reset emails: wait a minute and try once more.
 
 Open the email, click the link. It opens **Choose a new password**.
 
@@ -174,6 +180,6 @@ Then:
 
 ## Related
 
-- After owner signup: [Business](business.md)
+- After owner signup: [First day](first-day.md) then [Business](business.md)
 - Inviting people: [Team](team.md)
 - Changing name/password later: [Profile](profile.md)

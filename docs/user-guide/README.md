@@ -6,11 +6,13 @@ It is written for someone who has **never used this software before**. You do no
 
 Technical setup (Docker, SMTP, backups) lives in the project [README](../../README.md), not here. This guide assumes the shop software is already open in a browser — usually the HTTPS address your operator gave you, or **http://localhost:3000** on a local install. Do not run the database on the counter PC.
 
+If **you** host the software and create shops for others, start with [Platform Super Admin](platform-admin.md) instead.
+
 ---
 
 ## What this software is
 
-One workspace for **one shop**. You:
+One workspace for **one shop**. (The host computer can run many shops; each owner only sees theirs.) You:
 
 - Keep a product list and current stock
 - Buy from suppliers (purchases / bills)
@@ -20,6 +22,7 @@ One workspace for **one shop**. You:
 - Share a bill PDF from the phone (share sheet / WhatsApp)
 - Download Excel for the accountant
 - Invite staff with limited access
+- Switch the menu and Counter between **English** and **हिन्दी**
 
 It is **not** full accounting, not GSTR filing, not e-way bill, and not the WhatsApp Business API.
 
@@ -65,11 +68,13 @@ On every screen page you will find:
 | Settings | Currency, dates, GST, negative stock | [Settings](settings.md) |
 | Profile | Your name and password | [Profile](profile.md) |
 
-Shared chrome (menu, alerts, Sign out, mobile Menu button): [Around the workspace](workspace.md).
+Shared chrome (menu, language, alerts, Sign out, mobile Menu button): [Around the workspace](workspace.md).
 
 **How do I…?** (sell, collect, return, Excel, invite staff): [Everyday jobs](everyday-jobs.md).
 
-**GST:** what to type and which box to tick: [GST on invoices](gst.md).
+**GST:** what to type and which state code to set: [GST on invoices](gst.md).
+
+**You host the app:** [Platform Super Admin](platform-admin.md).
 
 ---
 
@@ -91,10 +96,11 @@ If the operator created your shop, skip naming it and start at Counter.
 
 1. [Sign in with mobile OTP or the issued email](sign-in-and-account.md)
 2. [Name the shop](first-day.md) only if Start asks for it (GSTIN later on [Business](business.md) if you charge GST)
-3. [Counter](counter.md) — first bill, then share or print
-4. [Products](products.md) when you replace the starter items
-5. [Suppliers](suppliers.md) then [Purchases](purchases.md) (or set opening stock on products if stock is already in the shop)
-6. [Team](team.md) when someone else needs a login
+3. Optionally set **Language** to हिन्दी in the sidebar
+4. [Counter](counter.md) — first bill, then share or print
+5. [Products](products.md) when you replace the starter items
+6. [Suppliers](suppliers.md) then [Purchases](purchases.md) (or set opening stock on products if stock is already in the shop)
+7. [Team](team.md) when someone else needs a login
 
 ---
 
@@ -104,21 +110,26 @@ If the operator created your shop, skip naming it and start at Counter.
 |----------------|---------|
 | **Sale / invoice** | You sold goods to a customer |
 | **Purchase / bill** | You bought goods from a supplier |
+| **SAL/2025-26/000001** | Invoice number: type / Indian FY / serial. Purchases use `PUR/`, sale returns `RET/`, purchase returns `PRT/` |
 | **Outstanding / due** | Still unpaid |
 | **PENDING** | Nothing paid yet |
 | **PARTIAL** | Some money received, some still due |
 | **PAID** | Fully paid (after returns, if any) |
+| **Refund** | A payment line written when you **cancel** a bill that already had money on it |
 | **Archive** | Hide from the default list; history stays |
 | **Restore** | Bring an archived record back to the default list |
 | **Opening stock** | Quantity already in the shop when you first add a product |
 | **Low stock** | Current quantity is at or below the threshold you set |
-| **Interstate (IGST)** | Customer or supplier is in a **different state** than the shop |
+| **State code** | Two-digit GST state (`29` Karnataka, `27` Maharashtra). Compared with the shop’s state to choose CGST/SGST vs IGST |
+| **Interstate (IGST)** | Party state differs from the shop; shown automatically — you do not tick a box |
 | **Prices include GST** | The rupee amount you type already contains tax |
+| **Inventory value** | Current quantity × **weighted average cost** (purchases mix into cost; it is not always the last bill’s rate) |
 
 ---
 
 ## What this guide does not cover
 
 - Installing Docker, SMTP, or HTTPS — see the project README
+- Creating or suspending shops — [Platform Super Admin](platform-admin.md)
 - Filing GSTR-1 on the government portal — export GST Excel from Reports and give it to your accountant
 - Barcode **hardware drivers** — most USB scanners type digits into the Counter barcode box and press Enter, which is enough

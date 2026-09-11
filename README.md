@@ -32,10 +32,10 @@ If ports 3000, 8080, or 5432 are already in use, change `FRONTEND_PORT`, `BACKEN
 1. Shop owner opens the URL. In production you create the shop from `/platform` and send credentials (or they self-register if `APP_OPEN_REGISTRATION=true`).
 2. They sign in with **mobile OTP** or the email you issued.
 3. If the shop is new and self-serve is on, they type the **shop name** on Start. Walk-in plus five hardware starter items are created.
-4. They sell from **Counter**. **Share bill** or **Print**.
-5. Add GSTIN/logo on **Business** when needed. Invite a clerk from **Team** by email.
+4. They sell from **Counter**. **Share bill** or **Print**. Invoice numbers look like `SAL/2025-26/000001`.
+5. Add GSTIN/logo on **Business** when needed. Out-of-state parties need a **State code** (no Interstate tick on the bill). Invite a clerk from **Team** by email.
 
-Direction and definition of done: [08-small-town-cloud.md](docs/08-small-town-cloud.md). Super Admin: [09-platform-admin.md](docs/09-platform-admin.md). Shop screens: [docs/user-guide/](docs/user-guide/README.md).
+Direction and definition of done: [08-small-town-cloud.md](docs/08-small-town-cloud.md). Super Admin first day: [user-guide/platform-admin.md](docs/user-guide/platform-admin.md) ([09-platform-admin.md](docs/09-platform-admin.md) is the short ops index). Shop screens: [docs/user-guide/](docs/user-guide/README.md).
 
 ### Verify / reset email (`dev`, no SMTP)
 
@@ -50,13 +50,15 @@ Copy the link from `docker compose logs backend` (or `make logs`).
 ## What the product includes
 
 - Owner / manager / clerk roles (invite by email; clerks sell, cannot edit catalog or reports)
-- GST on sales and purchases (CGST/SGST or IGST), GSTIN on PDFs, GST Excel report
-- Barcode lookup at the counter
+- GST on sales and purchases (CGST/SGST or IGST from party vs shop state), GSTIN on PDFs, GST Excel with output / input / net
+- Consecutive invoice numbers per Indian financial year (`SAL/2025-26/000001`)
+- Barcode lookup at the counter; English / Hindi for the menu and Counter
 - Invoice and purchase-bill PDFs with shop logo
 - Excel for inventory, sales, purchases, dues, and GST
 - Low-stock and overdue-payment alerts
 - Activity log for sales, purchases, and staff changes
 - Phone-friendly navigation
+- Super Admin console (`/platform`) to create and suspend shops
 
 Out of scope: native mobile apps, WhatsApp Business API, e-way bill, multi-warehouse, and full accounting. Device share / `wa.me` for invoice PDFs is in scope.
 
@@ -184,8 +186,8 @@ Copy [.env.example](.env.example) to `.env` for Compose interpolation.
 | [06-as-built-technical.md](docs/06-as-built-technical.md) | What the codebase actually is today |
 | [07-path-to-usable-product.md](docs/07-path-to-usable-product.md) | Market-ready status and remaining out-of-scope items |
 | [08-small-town-cloud.md](docs/08-small-town-cloud.md) | Hosted register: phone OTP, sell-first, backups |
-| [09-platform-admin.md](docs/09-platform-admin.md) | Super Admin console: add/suspend shops |
-| [user-guide/](docs/user-guide/README.md) | Shop operator screens |
+| [09-platform-admin.md](docs/09-platform-admin.md) | Super Admin env, suspend, backups (short) |
+| [user-guide/](docs/user-guide/README.md) | Shop operator screens, [first day](docs/user-guide/first-day.md), [platform admin](docs/user-guide/platform-admin.md) |
 
 ## Stack
 

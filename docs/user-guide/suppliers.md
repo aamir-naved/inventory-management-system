@@ -25,6 +25,7 @@ Heading: **Create supplier** or **Edit supplier**.
 | **Contact person** | No | Who you call, max 120 characters. Example: `Rahul Mehta`. |
 | **Mobile number** | No | 7–20 phone characters if filled. Example: `+91 9876543210`. |
 | **Address** | No | Max 255 characters. Example: `Industrial Road`. |
+| **State code** | No | Two-digit GST state. Fill when GST is on and this supplier is in another state so purchase bills use IGST. Blank = local (CGST/SGST). |
 
 Click **Create supplier** or **Save supplier**.
 

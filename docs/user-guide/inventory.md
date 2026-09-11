@@ -32,7 +32,7 @@ Use **manual adjustment** only when none of those fit: theft, breakage, physical
 | Card | Meaning |
 |------|---------|
 | **Total products** | Active items in stock tracking |
-| **Current stock value** | Cost price × current quantity |
+| **Current stock value** | Weighted average cost × current quantity |
 | **Low stock alerts** | How many items are at or below threshold |
 
 ---

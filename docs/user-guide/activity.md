@@ -21,7 +21,7 @@ A list of cards, newest first, 25 per page (**Previous** / **Next**).
 
 Each card:
 
-- **Summary** — human sentence (example: `Sale SALE-… for Apex Builders`, `Invited aisha@shop.com as CLERK`)
+- **Summary** — human sentence (example: `Sale SAL/2025-26/000001 for Apex Builders`, `Invited aisha@shop.com as CLERK`)
 - **Action** code · **date and time** (formatted per Settings)
 
 There is no search box. Scroll or page through.

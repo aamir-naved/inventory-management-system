@@ -48,7 +48,7 @@ Opening stock note on the form: **Opening stock becomes the initial current stoc
 | **Unit** | Yes | How you count it. Dropdown: Pieces, Bags, Kg, Grams, Liters, Ml, Boxes, Packs, Tons, Meters, Rolls, Dozen. Choose **Other** and type a custom unit (max 30 characters) if needed. |
 | **Opening stock** | No (blank = 0) | Quantity already in the shop. Decimals allowed (step 0.001). Example: `120`. On **create**, this becomes **current stock**. |
 | **Low stock threshold** | No (blank = 0, or Settings default) | When current stock is at or below this, the item is **low stock**. Example: `10`. New forms may pre-fill Settings’ default. |
-| **Cost price** | Typically fill | What you usually pay **per unit**. Example: `300`. Used for inventory **value**. |
+| **Cost price** | Typically fill | What you usually pay **per unit**. Example: `300`. Used for inventory **value**. After purchases, this becomes a **weighted average** of stock you already had and the new bill — do not expect it to stay at the last supplier rate. |
 | **Selling price** | Typically fill | What you usually charge **per unit**. Example: `350`. Counter and Sales copy this; you can still change the price on a bill. |
 | **HSN** | No | HSN/SAC, max 8 characters. Example: `2523`. Printed on GST invoices. |
 | **GST %** | Yes (dropdown) | `0%`, `5%`, `12%`, `18%`, or `28%`. Used when GST is enabled. Pick `0%` for exempt items. |

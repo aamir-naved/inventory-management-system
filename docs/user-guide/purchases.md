@@ -19,7 +19,7 @@ If you only counted opening stock on Products and never buy, you may rarely open
 
 - Products exist (you cannot type a free-text item name on a bill).
 - Know the supplier, quantities, and **purchase** rates (not selling rates).
-- If GST is on: know whether this bill is **interstate** (supplier in another state).
+- If GST is on: set the supplier’s **State code** when they are in another state (so IGST is used). Blank state = local tax.
 
 ---
 
@@ -36,7 +36,7 @@ If business is missing: **Finish business setup before recording purchases.**
 
 ## Quick supplier setup (left)
 
-Same fields as [Suppliers](suppliers.md): name (required), contact person, mobile, address.
+Same fields as [Suppliers](suppliers.md): name (required), contact person, mobile, address, state code.
 
 Click **Create supplier**. That supplier is **selected** for the purchase form immediately. Message: **Supplier created.**
 
@@ -54,7 +54,7 @@ This records **new** stock in. It does not edit an old bill’s lines (you can o
 |-------|----------|------------------------|
 | **Supplier** | Yes | Click the box, type part of the name, click the match. Or click a chip on the left. Create them first if **No matches**. |
 | **Purchase date** | Yes | Date the stock was bought or received. Defaults to **today**. Use the calendar. |
-| **Interstate supply (charge IGST instead of CGST/SGST)** | Only if GST is on | Tick when the **supplier’s state is not your shop’s state**. Leave off for local purchases (CGST+SGST). |
+| Tax note | Only if GST is on | Read-only: **Intrastate (CGST/SGST)** or **Interstate (IGST)** from supplier vs shop state. Change it by editing the supplier’s **State code**. |
 | **Amount paid now** | No (blank = 0) | Money you paid the supplier **with this bill**. `0` or blank = full credit (status **PENDING**). Pay the full total for **PAID**. Anything in between is **PARTIAL**. |
 | **Notes** | No | Max 255 characters. Example: `Restocking cement`, lorry number, supplier bill number. |
 
@@ -80,7 +80,7 @@ You need **at least one** complete line. Incomplete lines (missing product, quan
 
 Click **Record purchase**. While working: **Recording purchase...**
 
-Success: **Purchase recorded. Stock increased for the products you bought.** The new bill is selected below. The create form resets to today for the next lorry.
+Success: **Purchase recorded. Stock increased for the products you bought.** The bill number looks like `PUR/2025-26/000001`. Each product’s **cost price** is updated to a weighted average of stock you already had and this bill’s rate (so inventory value is not stuck on the old cost). The new bill is selected below. The create form resets to today for the next lorry.
 
 ---
 
@@ -121,7 +121,7 @@ Otherwise:
 | **Amount** | How much you are paying **now**. Must be &gt; 0 and **cannot exceed** outstanding. The box is pre-filled with the full due amount — lower it for a part payment. |
 | **Notes** | Optional. Example: `Cash / UPI / bank transfer`, cheque number. |
 
-Click **Record payment**. Status becomes PARTIAL or PAID. **Payment history** lists earlier payments with date, notes, and amount.
+Click **Record payment**. Status becomes PARTIAL or PAID. **Payment history** lists earlier payments with date, notes, and amount. If this bill is later **cancelled**, a **Refund** line appears for what had been paid.
 
 ### Record purchase return (if any quantity is still returnable)
 
@@ -134,7 +134,7 @@ Use this when you send goods **back to the supplier**. Stock **goes down**. Net 
 | **Notes** | Example: `Sent unused stock back to supplier`. |
 | **Quantity** per line | Only lines with remaining quantity appear. Type how many to return, up to **Returnable**. Leave blank/`0` on lines you are not returning. At least one line must have quantity &gt; 0. |
 
-**Return amount** shows a live rupee total. Click **Record purchase return**.
+**Return amount** shows a live rupee total. Click **Record purchase return**. Return numbers look like `PRT/2025-26/000001`. The credit includes tax, same as sales.
 
 Earlier returns appear under **Returns on this purchase** with return number and quantities.
 
@@ -148,7 +148,7 @@ Use when the **whole bill was a mistake** (duplicate, never received) and you ha
 |-------|----------------|
 | **Cancellation reason** | Required. Example: `Duplicate bill from supplier`. Max 255. |
 
-Click **Cancel purchase**. Stock is reversed. The bill stays in history as **Cancelled**.
+Click **Cancel purchase**. Stock is reversed. Money already recorded is written as a **Refund** in payment history. The bill stays in history as **Cancelled**.
 
 If the purchase **has returns**, cancel is disabled: **This purchase has returns, so it cannot be cancelled. Record another purchase return instead if needed.**
 
@@ -169,12 +169,12 @@ Cancelled bills show the reason and no pay/return form.
 
 ## GST on this screen
 
-If GST is off, you will not see the interstate tick; totals are quantity × price.
+If GST is off, you will not see the tax note; totals are quantity × price.
 
 If GST is on:
 
 - Each product’s **GST %** from the catalog is used
-- **Interstate** → IGST; otherwise CGST + SGST split
+- Local vs interstate follows the supplier’s **State code** vs the shop (no tick box)
 - **Prices include GST** (Settings/Business) changes whether tax is inside the rate or added on top
 
 ---
@@ -185,7 +185,7 @@ If GST is on:
 - Forgetting **Amount paid now** when you already paid cash — the supplier will show as outstanding until you **Record payment**.
 - Adjusting inventory instead of a purchase — you lose the supplier bill.
 - Cancelling after a return — not allowed; return the rest or live with the bill.
-- Interstate ticked for a local dealer — tax split on the PDF will be IGST instead of CGST/SGST.
+- Wrong **State code** on the supplier — tax split on the PDF will be IGST instead of CGST/SGST (or the other way around).
 
 ---
 

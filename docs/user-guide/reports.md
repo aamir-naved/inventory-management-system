@@ -30,7 +30,7 @@ Use your browser’s print if you want paper of what you see.
 
 **Filter:** tick **Low stock only** to hide healthy items.
 
-**Cards:** product count, stock value (cost × qty), how many are low.
+**Cards:** product count, stock value (weighted average cost × qty), how many are low.
 
 **Each row:** name, SKU, In stock / Low stock, current stock, value, cost, selling price.
 
@@ -78,11 +78,17 @@ Same idea for suppliers. Pay on [Purchases](purchases.md).
 
 **Filters:** From date, To date.
 
-**Cards:** **Taxable** amount, **Tax** amount.
+**Cards:**
 
-**Each row:** document type + number, party, date, taxable, GST %, CGST, SGST, IGST.
+| Card | Meaning |
+|------|---------|
+| **Output tax** | GST on sales minus sale returns |
+| **Input tax** | GST on purchases minus purchase returns |
+| **Net tax** | Output − input (working paper for the CA) |
 
-**When:** give Excel to the CA. This does **not** file GSTR-1. Interstate bills show IGST; local show CGST/SGST.
+**Each row:** document type + number (`SAL/` / `PUR/` / `RET/` / `PRT/…`), party, date, taxable, GST %, CGST, SGST, IGST. Returns are negative rows.
+
+**When:** give Excel to the CA. This does **not** file GSTR-1. Interstate bills show IGST; local show CGST/SGST. Tax split follows party **State code**, not a tick on the bill.
 
 If GST is off in Settings, this tab will be empty or not useful until you enable GST and record taxed bills.
 
